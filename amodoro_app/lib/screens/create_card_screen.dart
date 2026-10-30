@@ -48,8 +48,6 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     {'key': 'mono', 'label': 'FUENTE · MONO'},
   ];
 
-  static const List<int> _sizeOptionsPx = [14, 18, 22, 26, 32];
-
   @override
   void dispose() {
     _textController.dispose();
@@ -384,21 +382,16 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Fila inferior de 3 menús desplegables en cápsulas: FUENTE | 18 PX | COLOR
+              // Fila inferior de 3 menús desplegables en cápsulas: FUENTE | COLOR
               Row(
                 children: [
                   Expanded(
-                    flex: 4,
+                    flex: 5,
                     child: _buildFontDropdownCapsule(capsuleSurface),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Expanded(
-                    flex: 3,
-                    child: _buildSizeDropdownCapsule(capsuleSurface),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 3,
+                    flex: 5,
                     child: _buildColorDropdownCapsule(capsuleSurface),
                   ),
                 ],
@@ -458,18 +451,21 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     );
 
     if (_loadingLink) {
-      return Container(
-        height: 180,
-        decoration: AmodoroTheme.floatingPerspectiveBox(
-          color: canvasOuterColor,
-          radius: 24,
-          thickness: 2.5,
-          perspectiveEdgeColor: canvasEdge,
-        ),
-        child: Center(
-          child: Text(
-            'CARGANDO VISTA PREVIA DEL LINK...',
-            style: TextStyle(color: canvasInk),
+      return AspectRatio(
+        aspectRatio: 1.0,
+        child: Container(
+          decoration: AmodoroTheme.floatingPerspectiveBox(
+            color: canvasOuterColor,
+            radius: 24,
+            thickness: 2.5,
+            perspectiveEdgeColor: canvasEdge,
+          ),
+          child: Center(
+            child: Text(
+              'CARGANDO VISTA PREVIA DEL LINK...',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: canvasInk),
+            ),
           ),
         ),
       );
@@ -478,23 +474,27 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     if (_mediaMode == 'photo' && _imageDataUrl != null) {
       final comma = _imageDataUrl!.indexOf(',');
       final bytes = base64Decode(_imageDataUrl!.substring(comma + 1));
-      return Stack(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(22),
-            child: Image.memory(
-              bytes,
-              height: 220,
-              width: double.infinity,
-              fit: BoxFit.cover,
+      return AspectRatio(
+        aspectRatio: 1.0,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: Image.memory(
+                bytes,
+                width: double.infinity,
+                height: double.infinity,
+                fit: BoxFit.cover,
+              ),
             ),
-          ),
-          Positioned(
-            top: 10,
-            right: 10,
-            child: _buildCancelMediaChip(),
-          ),
-        ],
+            Positioned(
+              top: 10,
+              right: 10,
+              child: _buildCancelMediaChip(),
+            ),
+          ],
+        ),
       );
     }
 
@@ -539,72 +539,82 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
         platform: _linkPreview!.platform,
         cardBgColor: canvasOuterColor,
         onRemove: _cancelMediaSelection,
+        isSquare: true,
       );
     }
 
-    // Por defecto: Cuadrícula 2x2 con colores basados en el fondo de la app (no en el color de la tarjeta)
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: AmodoroTheme.floatingPerspectiveBox(
-        color: canvasOuterColor,
-        radius: 26,
-        thickness: 2.5,
-        perspectiveEdgeColor: canvasEdge,
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _buildQuadOptionTile(
-                  icon: Symbols.photo_camera,
-                  label: 'CAPTURAR',
-                  tileColor: canvasTileColor,
-                  edgeColor: canvasEdge,
-                  inkColor: canvasInk,
-                  onTap: () => _pickCameraOrGallery(ImageSource.camera),
-                ),
+    // Por defecto: Cuadrícula 2x2 cuadrada (1:1) con colores basados en el fondo de la app
+    return AspectRatio(
+      aspectRatio: 1.0,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: AmodoroTheme.floatingPerspectiveBox(
+          color: canvasOuterColor,
+          radius: 26,
+          thickness: 2.5,
+          perspectiveEdgeColor: canvasEdge,
+        ),
+        child: Column(
+          children: [
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _buildQuadOptionTile(
+                      icon: Symbols.photo_camera,
+                      label: 'CAPTURAR',
+                      tileColor: canvasTileColor,
+                      edgeColor: canvasEdge,
+                      inkColor: canvasInk,
+                      onTap: () => _pickCameraOrGallery(ImageSource.camera),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildQuadOptionTile(
+                      icon: Symbols.image,
+                      label: 'IMAGEN',
+                      tileColor: canvasTileColor,
+                      edgeColor: canvasEdge,
+                      inkColor: canvasInk,
+                      onTap: () => _pickCameraOrGallery(ImageSource.gallery),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildQuadOptionTile(
-                  icon: Symbols.image,
-                  label: 'IMAGEN',
-                  tileColor: canvasTileColor,
-                  edgeColor: canvasEdge,
-                  inkColor: canvasInk,
-                  onTap: () => _pickCameraOrGallery(ImageSource.gallery),
-                ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _buildQuadOptionTile(
+                      icon: Symbols.edit,
+                      label: 'DIBUJO',
+                      tileColor: canvasTileColor,
+                      edgeColor: canvasEdge,
+                      inkColor: canvasInk,
+                      onTap: _openDrawingMode,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildQuadOptionTile(
+                      icon: Symbols.north_east,
+                      label: 'LINK',
+                      tileColor: canvasTileColor,
+                      edgeColor: canvasEdge,
+                      inkColor: canvasInk,
+                      onTap: _openLinkDialog,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildQuadOptionTile(
-                  icon: Symbols.edit,
-                  label: 'DIBUJO',
-                  tileColor: canvasTileColor,
-                  edgeColor: canvasEdge,
-                  inkColor: canvasInk,
-                  onTap: _openDrawingMode,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildQuadOptionTile(
-                  icon: Symbols.north_east,
-                  label: 'LINK',
-                  tileColor: canvasTileColor,
-                  edgeColor: canvasEdge,
-                  inkColor: canvasInk,
-                  onTap: _openLinkDialog,
-                ),
-              ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -620,7 +630,6 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 92,
         decoration: AmodoroTheme.floatingPerspectiveBox(
           color: tileColor,
           radius: 20,
@@ -681,8 +690,8 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
 
   Widget _buildFontDropdownCapsule(Color surface) {
     return Container(
-      height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      constraints: const BoxConstraints(minHeight: 40),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: AmodoroTheme.floatingPerspectiveBox(
         color: surface,
         radius: 999,
@@ -715,43 +724,10 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     );
   }
 
-  Widget _buildSizeDropdownCapsule(Color surface) {
-    return Container(
-      height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: AmodoroTheme.floatingPerspectiveBox(
-        color: surface,
-        radius: 999,
-        thickness: 2.5,
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<int>(
-          value: _fontSizePx,
-          isExpanded: true,
-          icon: AmodoroTheme.sysIcon(Symbols.expand_more, size: 18),
-          style: TextStyle(
-            fontSize: 11,
-            letterSpacing: 1.0,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
-          items: _sizeOptionsPx.map((px) {
-            return DropdownMenuItem<int>(
-              value: px,
-              child: Text('$px PX'),
-            );
-          }).toList(),
-          onChanged: (v) {
-            if (v != null) setState(() => _fontSizePx = v);
-          },
-        ),
-      ),
-    );
-  }
-
   Widget _buildColorDropdownCapsule(Color surface) {
     return Container(
-      height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      constraints: const BoxConstraints(minHeight: 40),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       decoration: AmodoroTheme.floatingPerspectiveBox(
         color: surface,
         radius: 999,

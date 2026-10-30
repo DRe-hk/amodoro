@@ -65,7 +65,7 @@ class DrawingCanvasController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> toPngDataUrl({double width = 600, double height = 400}) async {
+  Future<String?> toPngDataUrl({double width = 600, double height = 600}) async {
     if (_strokes.isEmpty) return null;
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, width, height));
@@ -206,46 +206,51 @@ class InteractiveDrawingPad extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Container(
-              height: 220,
-              decoration: AmodoroTheme.floatingPerspectiveBox(
-                color: const Color(0xFFFFFDF9),
-                radius: 22,
-                thickness: 2.5,
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(21),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final scaleX = 600.0 / constraints.maxWidth;
-                    final scaleY = 400.0 / constraints.maxHeight;
-                    return GestureDetector(
-                      onPanStart: (d) {
-                        controller.startStroke(
-                          Offset(
-                            d.localPosition.dx * scaleX,
-                            d.localPosition.dy * scaleY,
+            AspectRatio(
+              aspectRatio: 1.0,
+              child: Container(
+                decoration: AmodoroTheme.floatingPerspectiveBox(
+                  color: const Color(0xFFFFFDF9),
+                  radius: 22,
+                  thickness: 2.5,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(21),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final scaleX = 600.0 / constraints.maxWidth;
+                      final scaleY = 600.0 / constraints.maxHeight;
+                      return GestureDetector(
+                        onPanStart: (d) {
+                          controller.startStroke(
+                            Offset(
+                              d.localPosition.dx * scaleX,
+                              d.localPosition.dy * scaleY,
+                            ),
+                          );
+                        },
+                        onPanUpdate: (d) {
+                          controller.appendPoint(
+                            Offset(
+                              d.localPosition.dx * scaleX,
+                              d.localPosition.dy * scaleY,
+                            ),
+                          );
+                        },
+                        child: CustomPaint(
+                          size: Size(
+                            constraints.maxWidth,
+                            constraints.maxHeight,
                           ),
-                        );
-                      },
-                      onPanUpdate: (d) {
-                        controller.appendPoint(
-                          Offset(
-                            d.localPosition.dx * scaleX,
-                            d.localPosition.dy * scaleY,
+                          painter: _StrokePainter(
+                            strokes: controller.strokes,
+                            scaleX: scaleX,
+                            scaleY: scaleY,
                           ),
-                        );
-                      },
-                      child: CustomPaint(
-                        size: Size(constraints.maxWidth, constraints.maxHeight),
-                        painter: _StrokePainter(
-                          strokes: controller.strokes,
-                          scaleX: scaleX,
-                          scaleY: scaleY,
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
               ),
             ),

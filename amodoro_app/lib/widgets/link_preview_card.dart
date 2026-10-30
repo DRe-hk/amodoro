@@ -10,6 +10,7 @@ class LinkPreviewCard extends StatelessWidget {
   final String? platform;
   final Color cardBgColor;
   final VoidCallback? onRemove;
+  final bool isSquare;
 
   const LinkPreviewCard({
     super.key,
@@ -19,6 +20,7 @@ class LinkPreviewCard extends StatelessWidget {
     this.platform,
     this.cardBgColor = const Color(0xFFFFDAD6),
     this.onRemove,
+    this.isSquare = false,
   });
 
   String _detectPlatformLabel() {
@@ -67,7 +69,7 @@ class LinkPreviewCard extends StatelessWidget {
     final displayTitle =
         (title != null && title!.trim().isNotEmpty) ? title!.trim() : url;
 
-    return GestureDetector(
+    final content = GestureDetector(
       onTap: _openExternal,
       child: Container(
         decoration: AmodoroTheme.floatingPerspectiveBox(
@@ -78,11 +80,42 @@ class LinkPreviewCard extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
+          fit: isSquare ? StackFit.expand : StackFit.loose,
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: isSquare ? MainAxisSize.max : MainAxisSize.min,
               children: [
-                if (thumbnail != null && thumbnail!.trim().isNotEmpty)
+                if (isSquare)
+                  Expanded(
+                    child: (thumbnail != null && thumbnail!.trim().isNotEmpty)
+                        ? Image.network(
+                            thumbnail!.trim(),
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: cardBgColor.withValues(alpha: 0.45),
+                              child: Center(
+                                child: AmodoroTheme.sysIcon(
+                                  _platformIcon(),
+                                  size: 40,
+                                  color: ink,
+                                ),
+                              ),
+                            ),
+                          )
+                        : Container(
+                            color: cardBgColor.withValues(alpha: 0.35),
+                            child: Center(
+                              child: AmodoroTheme.sysIcon(
+                                _platformIcon(),
+                                size: 44,
+                                color: ink,
+                              ),
+                            ),
+                          ),
+                  )
+                else if (thumbnail != null && thumbnail!.trim().isNotEmpty)
                   SizedBox(
                     height: 135,
                     width: double.infinity,
@@ -187,5 +220,13 @@ class LinkPreviewCard extends StatelessWidget {
         ),
       ),
     );
+
+    if (isSquare) {
+      return AspectRatio(
+        aspectRatio: 1.0,
+        child: content,
+      );
+    }
+    return content;
   }
 }

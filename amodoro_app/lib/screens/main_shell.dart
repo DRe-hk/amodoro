@@ -96,9 +96,11 @@ class _MainShellState extends State<MainShell> {
                   final innerWidth = constraints.maxWidth;
                   final pillWidth = innerWidth / 3.0;
                   final leftOffset = _pageProgress * pillWidth;
+                  final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+                  final pillHeight = (22.0 * textScale).clamp(22.0, 34.0);
 
                   return SizedBox(
-                    height: 25,
+                    height: pillHeight + 4,
                     child: Stack(
                       clipBehavior: Clip.none,
                       alignment: Alignment.centerLeft,
@@ -107,7 +109,7 @@ class _MainShellState extends State<MainShell> {
                           left: leftOffset,
                           top: 0,
                           width: pillWidth,
-                          height: 22,
+                          height: pillHeight,
                           child: DecoratedBox(
                             decoration: AmodoroTheme.floatingPerspectiveBox(
                               color: coralPillBg,
@@ -125,10 +127,12 @@ class _MainShellState extends State<MainShell> {
                                 behavior: HitTestBehavior.opaque,
                                 onTap: () => _jumpToTab(i),
                                 child: SizedBox(
-                                  height: 22,
+                                  height: pillHeight,
                                   child: Center(
                                     child: Text(
                                       _tabs[i],
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                       style: isSelected
                                           ? AmodoroTheme.activeElementTextStyle(
                                               fontSize: 11.5,

@@ -806,9 +806,9 @@ class _BoardsScreenState extends State<BoardsScreen> {
     return Column(
       children: [
         // Fila superior de tableros (PENDIENTES, MÚSICA, PELIS, SERIES, JUEGOS...) + botón [+]
-        // Más pequeñas verticalmente (height: 46).
-        // Si está activa: fondo Coral, texto color del fondo de la app y weight 450.
-        // Si está inactiva: fondo neutro con borde 1px + borde en perspectiva del color elegido de esa lista.
+        // Más pequeñas verticalmente y adaptables al tamaño de texto del sistema.
+        // Si está activa: su relleno es del MISMO color que el botón inferior de esa lista (el color del board), con texto/icono blanco y weight 450.
+        // Si está inactiva: fondo neutro con borde completo de 1px + borde en perspectiva del color elegido de esa lista.
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.fromLTRB(18, 6, 18, 10),
@@ -816,14 +816,10 @@ class _BoardsScreenState extends State<BoardsScreen> {
             children: [
               ...widget.sync.boards.map((b) {
                 final selected = b.id == activeBoard.id;
-                final boardChosenEdgeColor = _accentFromHex(b.bgColor);
-                final tileBg = selected
-                    ? (isDark
-                        ? AmodoroTheme.coralPillDark
-                        : AmodoroTheme.coralPillLight)
-                    : neutralCardFill;
+                final boardChosenColor = _accentFromHex(b.bgColor);
+                final tileBg = selected ? boardChosenColor : neutralCardFill;
                 final tileInk = selected
-                    ? AmodoroTheme.coralText(isDark)
+                    ? Colors.white
                     : (isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk);
 
                 return Padding(
@@ -832,28 +828,30 @@ class _BoardsScreenState extends State<BoardsScreen> {
                     onTap: () => setState(() => _selectedBoardId = b.id),
                     onLongPress: () => _showBoardSubmenu(existing: b),
                     child: Container(
-                      width: 94,
-                      height: 46,
+                      width: 96,
+                      constraints: const BoxConstraints(minHeight: 46),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
-                        vertical: 4,
+                        vertical: 5,
                       ),
                       decoration: AmodoroTheme.floatingPerspectiveBox(
                         color: tileBg,
                         radius: 15,
-                        thickness: selected ? 2.5 : 2.2,
+                        thickness: selected ? 2.6 : 2.2,
                         fullBorderColor: selected ? null : neutralCardOutline,
                         fullBorderWidth: 1.0,
                         perspectiveEdgeColor: selected
-                            ? (isDark
-                                ? AmodoroTheme.coralPillBorderDark
-                                : AmodoroTheme.coralPillBorderLight)
-                            : boardChosenEdgeColor,
+                            ? AmodoroTheme.darkenForPerspective(
+                                boardChosenColor,
+                                0.22,
+                              )
+                            : boardChosenColor,
                       ),
                       child: Stack(
                         children: [
                           Center(
                             child: Column(
+                              mainAxisSize: MainAxisSize.min,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 AmodoroTheme.sysIcon(
@@ -893,7 +891,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                               child: AmodoroTheme.sysIcon(
                                 Symbols.more_horiz,
                                 size: 13,
-                                color: tileInk.withValues(alpha: 0.72),
+                                color: tileInk.withValues(alpha: 0.78),
                               ),
                             ),
                           ),
@@ -904,12 +902,12 @@ class _BoardsScreenState extends State<BoardsScreen> {
                 );
               }),
 
-              // Botón [+] a la derecha compacto (height: 46)
+              // Botón [+] a la derecha compacto
               GestureDetector(
                 onTap: () => _showBoardSubmenu(),
                 child: Container(
                   width: 48,
-                  height: 46,
+                  constraints: const BoxConstraints(minHeight: 46),
                   decoration: AmodoroTheme.floatingPerspectiveBox(
                     color: neutralCardFill,
                     radius: 15,
