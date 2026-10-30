@@ -1,0 +1,81 @@
+name: Build Amodoro Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Generate platform directories (Android, iOS, Web) & configure Cleartext HTTP for Azure VPS
+        working-directory: amodoro_app
+        run: |
+          flutter create . --project-name amodoro_app --org com.amodoro --platforms android,ios,web
+          python3 - << 'PY'
+          from pathlib import Path
+          manifest_path = Path("android/app/src/main/AndroidManifest.xml")
+          txt = manifest_path.read_text()
+          if "android.permission.INTERNET" not in txt:
+              txt = txt.replace("<manifest", '<manifest\n    xmlns:android="http://schemas.android.com/apk/res/android"', 1) if 'xmlns:android' not in txt else txt
+              txt = txt.replace("<application", '<uses-permission android:name="android.permission.INTERNET"/>\n    <application', 1)
+          if "usesCleartextTraffic" not in txt:
+              txt = txt.replace("<application", '<application\n        android:usesCleartextTraffic="true"', 1)
+          manifest_path.write_text(txt)
+          print("Updated AndroidManifest.xml:")
+          print(txt)
+          PY
+
+      - name: Install Flutter dependencies & verify
+        working-directory: amodoro_app
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos
+          flutter test
+
+      - name: Build Release APK (split-per-abi & universal)
+        working-directory: amodoro_app
+        run: |
+          flutter build apk --release --split-per-abi
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../amodoro-arm64.apk
+          cp build/app/outputs/flutter-apk/app-release.apk ../amodoro.apk
+          ls -lh ../amodoro*.apk
+
+      - name: Upload APK Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: amodoro-apk
+          path: |
+            amodoro.apk
+            amodoro-arm64.apk
+
+      - name: Publish GitHub Release with APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          name: "Amodoro v1.0.0 (Android APK + Azure VPS)"
+          files: |
+            amodoro.apk
+            amodoro-arm64.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

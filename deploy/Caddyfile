@@ -1,0 +1,30 @@
+# Amodoro — Caddy reverse proxy con HTTPS automático
+#
+# Copiar al VPS:
+#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#
+# Sustituye amodoro.tudominio.com por tu dominio o subdominio configurado hacia la IP del Azure VPS.
+
+amodoro.tudominio.com {
+	encode zstd gzip
+
+	request_body {
+		max_size 55MB
+	}
+
+	reverse_proxy 127.0.0.1:3000
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options    "nosniff"
+		X-Frame-Options           "DENY"
+		Referrer-Policy           "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/amodoro.log
+		format json
+	}
+}

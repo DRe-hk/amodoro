@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --amodoro-bg: #FCF9F5;
+    --amodoro-surface: #F4EFE8;
+    --amodoro-text: #1F1B18;
+    --amodoro-muted: #6E655F;
+    --amodoro-pill-home-bg: #F2B8B5;
+    --amodoro-pill-home-fg: #410E0B;
+    --amodoro-pill-boards-bg: #B8E0C8;
+    --amodoro-pill-boards-fg: #0B3822;
+    --amodoro-pill-settings-bg: #E6CBA8;
+    --amodoro-pill-settings-fg: #3B260B;
+  }
+
+  html {
+    font-family: var(--font-sans-ui), system-ui, -apple-system, sans-serif;
+    -webkit-text-size-adjust: 100%;
+    background-color: var(--amodoro-bg);
+    color: var(--amodoro-text);
+  }
+
+  body {
+    background-color: var(--amodoro-bg);
+    color: var(--amodoro-text);
+    overflow-x: hidden;
+  }
+}
+
+.font-card-sans {
+  font-family: var(--font-sans-ui), system-ui, sans-serif;
+}
+
+.font-card-serif {
+  font-family: var(--font-serif-card), Georgia, serif;
+}
+
+.font-card-hand {
+  font-family: var(--font-hand-card), cursive;
+}
+
+.font-card-mono {
+  font-family: var(--font-mono-card), ui-monospace, monospace;
+}
+
+/* Custom floating elevation per M3 guidelines & Craft Floor */
+.m3-floating-card {
+  box-shadow:
+    0 2px 6px -1px rgba(31, 27, 24, 0.07),
+    0 12px 28px -8px rgba(31, 27, 24, 0.12),
+    0 1px 0 rgba(255, 255, 255, 0.45) inset;
+}
+
+/* Hide scrollbars on horizontal chip rows while keeping scroll */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
