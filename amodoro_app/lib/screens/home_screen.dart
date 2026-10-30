@@ -22,7 +22,14 @@ class HomeScreen extends StatelessWidget {
     required this.onRefresh,
   });
 
-  static const List<String> _reactionEmojis = ['❤️', '🥰', '✨', '🔥', '😂', '🙌'];
+  static const List<String> _defaultReactionEmojis = [
+    '❤️',
+    '🥰',
+    '🥺',
+    '✨',
+    '🔥',
+    '🫶',
+  ];
 
   Future<void> _react(
     BuildContext context, {
@@ -379,12 +386,15 @@ class HomeScreen extends StatelessWidget {
         ),
         const SizedBox(height: 12),
 
-        // Cápsulas de reacción flotantes con borde en perspectiva
+        // Cápsulas de reacción flotantes con borde en perspectiva (emojis personalizables desde Ajustes)
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              ..._reactionEmojis.map((emoji) {
+              ...(sync.reactionEmojis.isNotEmpty
+                      ? sync.reactionEmojis
+                      : _defaultReactionEmojis)
+                  .map((emoji) {
                 return Padding(
                   padding: const EdgeInsets.only(right: 8, bottom: 4),
                   child: GestureDetector(

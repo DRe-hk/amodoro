@@ -72,10 +72,10 @@ class _AmodoroAppState extends State<AmodoroApp> {
   }
 
   ThemeMode _resolveThemeMode() {
-    final mode = _sync?.me.themeMode ?? 'light';
+    final mode = _sync?.me.themeMode ?? 'system';
     if (mode == 'dark') return ThemeMode.dark;
-    if (mode == 'auto' || mode == 'system') return ThemeMode.system;
-    return ThemeMode.light;
+    if (mode == 'light') return ThemeMode.light;
+    return ThemeMode.system;
   }
 
   @override

@@ -47,7 +47,7 @@ export const users = sqliteTable(
     nicknameByPartner: text("nickname_by_partner").notNull().default(""),
     themeMode: text("theme_mode", { enum: THEME_MODES })
       .notNull()
-      .default("light"),
+      .default("system"),
     accentPalette: text("accent_palette", { enum: ACCENT_PALETTE_IDS })
       .notNull()
       .default("fig-sage"),
@@ -61,6 +61,11 @@ export const users = sqliteTable(
           "Te extraño mucho",
           "Me sacaste una sonrisa",
         ]),
+      ),
+    reactionEmojisJson: text("reaction_emojis_json")
+      .notNull()
+      .default(
+        JSON.stringify(["❤️", "🥰", "🥺", "✨", "🔥", "🫶"]),
       ),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },

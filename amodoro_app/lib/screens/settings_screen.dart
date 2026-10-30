@@ -28,11 +28,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _myDisplayNameCtrl;
   late final TextEditingController _partnerNicknameCtrl;
   late final TextEditingController _newReplyCtrl;
+  late final TextEditingController _newEmojiCtrl;
   late String _themeMode;
   late List<String> _quickReplies;
+  late List<String> _reactionEmojis;
 
   bool _saving = false;
   bool _addingReply = false;
+  bool _addingEmoji = false;
   String? _generatedInvite;
 
   @override
@@ -44,13 +47,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _partnerNicknameCtrl =
         TextEditingController(text: widget.sync.me.partnerNicknameGiven);
     _newReplyCtrl = TextEditingController();
+    _newEmojiCtrl = TextEditingController();
     _themeMode = widget.sync.me.themeMode == 'auto'
         ? 'system'
         : widget.sync.me.themeMode;
     if (!['light', 'dark', 'system'].contains(_themeMode)) {
-      _themeMode = 'light';
+      _themeMode = 'system';
     }
     _quickReplies = List<String>.from(widget.sync.me.quickReplies);
+    _reactionEmojis = List<String>.from(widget.sync.me.reactionEmojis);
   }
 
   @override
@@ -58,6 +63,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _myDisplayNameCtrl.dispose();
     _partnerNicknameCtrl.dispose();
     _newReplyCtrl.dispose();
+    _newEmojiCtrl.dispose();
     super.dispose();
   }
 
@@ -85,6 +91,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         themeMode: _themeMode,
         accentPalette: widget.sync.me.accentPalette,
         quickReplies: _quickReplies,
+        reactionEmojis: _reactionEmojis,
       );
       await widget.onRefresh();
       if (mounted) {
@@ -119,6 +126,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  void _addReactionEmoji() {
+    final emo = _newEmojiCtrl.text.trim();
+    if (emo.isEmpty) return;
+    setState(() {
+      _reactionEmojis.add(emo);
+      _newEmojiCtrl.clear();
+      _addingEmoji = false;
+    });
+  }
+
+  void _removeEmojiAt(int index) {
+    if (_reactionEmojis.length <= 1) return;
+    setState(() {
+      _reactionEmojis.removeAt(index);
+    });
+  }
+
   Future<void> _generateInvite() async {
     try {
       final code = await widget.api.createInviteCode();
@@ -138,12 +162,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surface =
-        isDark ? const Color(0xFF1F2421) : const Color(0xFFF4EFE8);
+        isDark ? AmodoroTheme.darkContainer : AmodoroTheme.lightContainer;
     final coralBg =
         isDark ? AmodoroTheme.coralPillDark : AmodoroTheme.coralPillLight;
-    final coralInk = isDark
-        ? AmodoroTheme.coralPillTextDark
-        : AmodoroTheme.coralPillTextLight;
+    final coralInk = AmodoroTheme.coralText(isDark);
     final me = widget.sync.me;
 
     return ListView(
@@ -224,7 +246,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 16),
 
-        // 5. Selector de Tema en menú desplegable con iconos del sistema (sin emojis ni texto Material Design 3)
+        // 5. Selector de Tema en menú desplegable con iconos del sistema (por defecto Automático)
         Container(
           height: 50,
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -239,6 +261,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               isExpanded: true,
               icon: AmodoroTheme.sysIcon(Symbols.expand_more, size: 20),
               items: [
+                DropdownMenuItem(
+                  value: 'system',
+                  child: Row(
+                    children: [
+                      AmodoroTheme.sysIcon(Symbols.contrast, size: 18),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'TEMA AUTOMÁTICO',
+                        style: TextStyle(fontSize: 12.5, letterSpacing: 1.2),
+                      ),
+                    ],
+                  ),
+                ),
                 DropdownMenuItem(
                   value: 'light',
                   child: Row(
@@ -265,19 +300,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                 ),
-                DropdownMenuItem(
-                  value: 'system',
-                  child: Row(
-                    children: [
-                      AmodoroTheme.sysIcon(Symbols.contrast, size: 18),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'TEMA AUTOMÁTICO',
-                        style: TextStyle(fontSize: 12.5, letterSpacing: 1.2),
-                      ),
-                    ],
-                  ),
-                ),
               ],
               onChanged: (val) {
                 if (val != null) setState(() => _themeMode = val);
@@ -287,7 +309,115 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 22),
 
-        // 6. Lista de textos predeterminados con botón de añadir (*) y botón de eliminar al lado de cada frase
+        // 6. Personalización de emojis de reacción de HOME
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'EMOJIS DE REACCIÓN EN HOME',
+              style: TextStyle(fontSize: 11.5, letterSpacing: 1.3),
+            ),
+            GestureDetector(
+              onTap: () => setState(() => _addingEmoji = !_addingEmoji),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: AmodoroTheme.floatingPerspectiveBox(
+                  color: surface,
+                  radius: 999,
+                  thickness: 2.0,
+                ),
+                child: const Text(
+                  '* AÑADIR',
+                  style: TextStyle(fontSize: 11, letterSpacing: 1.2),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (_addingEmoji) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: AmodoroTheme.floatingPerspectiveBox(
+                      color: surface,
+                      radius: 18,
+                      thickness: 2.0,
+                    ),
+                    child: TextField(
+                      controller: _newEmojiCtrl,
+                      autofocus: true,
+                      onSubmitted: (_) => _addReactionEmoji(),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        hintText: 'Escribe un emoji...',
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: _addReactionEmoji,
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: AmodoroTheme.floatingPerspectiveBox(
+                      color: coralBg,
+                      radius: 999,
+                      thickness: 2.0,
+                    ),
+                    child: Center(
+                      child: AmodoroTheme.sysIcon(
+                        Symbols.check,
+                        size: 20,
+                        color: coralInk,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: List.generate(_reactionEmojis.length, (i) {
+            final emo = _reactionEmojis[i];
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: AmodoroTheme.floatingPerspectiveBox(
+                color: surface,
+                radius: 999,
+                thickness: 2.0,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(emo, style: const TextStyle(fontSize: 15)),
+                  if (_reactionEmojis.length > 1) ...[
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () => _removeEmojiAt(i),
+                      child: AmodoroTheme.sysIcon(
+                        Symbols.close,
+                        size: 15,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 22),
+
+        // 7. Lista de textos predeterminados con botón de añadir (*) y botón de eliminar al lado de cada frase
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -425,7 +555,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 16),
 
-        // 7. Debajo: únicamente el botón de generar código de invitación
+        // 8. Debajo: únicamente el botón de generar código de invitación
         GestureDetector(
           onTap: _generateInvite,
           child: Container(

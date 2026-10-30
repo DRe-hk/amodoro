@@ -184,9 +184,9 @@ class InteractiveDrawingPad extends StatelessWidget {
                         '${w.toInt()}PX',
                         style: TextStyle(
                           fontSize: 10,
-                          fontWeight: FontWeight.w300,
+                          fontWeight: FontWeight.w400,
                           color: selected
-                              ? Colors.white
+                              ? AmodoroTheme.coralText(isDark)
                               : (isDark ? Colors.white : Colors.black87),
                         ),
                       ),

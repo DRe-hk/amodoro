@@ -129,15 +129,19 @@ class _MainShellState extends State<MainShell> {
                                   child: Center(
                                     child: Text(
                                       _tabs[i],
-                                      style: GoogleFonts.raleway(
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w300,
-                                        letterSpacing: 1.6,
-                                        height: 1.0,
-                                        color: isSelected
-                                            ? coralPillInk
-                                            : inactiveInk,
-                                      ),
+                                      style: isSelected
+                                          ? AmodoroTheme.activeElementTextStyle(
+                                              fontSize: 11.5,
+                                              color: coralPillInk,
+                                              letterSpacing: 1.6,
+                                            ).copyWith(height: 1.0)
+                                          : GoogleFonts.raleway(
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w400,
+                                              letterSpacing: 1.6,
+                                              height: 1.0,
+                                              color: inactiveInk,
+                                            ),
                                     ),
                                   ),
                                 ),

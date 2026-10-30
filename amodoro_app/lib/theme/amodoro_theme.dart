@@ -17,25 +17,45 @@ class PastelPreset {
 }
 
 class AmodoroTheme {
-  // --- Lienzo de Fondo (Light & Dark) ---
-  static const Color lightBackground = Color(0xFFFCF9F5);
-  static const Color lightContainer = Color(0xFFF4EFE8);
+  // --- Lienzo de Fondo (Light más claro & Dark) ---
+  static const Color lightBackground = Color(0xFFFEFEFC);
+  static const Color lightContainer = Color(0xFFF6F4EE);
   static const Color lightInk = Color(0xFF1F1B18);
   static const Color lightMuted = Color(0xFF6E655E);
 
   static const Color darkBackground = Color(0xFF151816);
-  static const Color darkContainer = Color(0xFF1F2421);
+  static const Color darkContainer = Color(0xFF212623);
   static const Color darkInk = Color(0xFFF2EDE7);
   static const Color darkMuted = Color(0xFFA59E96);
 
   // --- Píldora Coral Uniforme ---
   static const Color coralPillLight = Color(0xFFF08076);
   static const Color coralPillBorderLight = Color(0xFFB54E45);
-  static const Color coralPillTextLight = Color(0xFF3B0D09);
+  // El texto sobre elementos con Coral debajo es del mismo color del fondo
+  static const Color coralPillTextLight = lightBackground;
 
   static const Color coralPillDark = Color(0xFFD96B62);
   static const Color coralPillBorderDark = Color(0xFF8E3932);
-  static const Color coralPillTextDark = Color(0xFFFFF5F4);
+  static const Color coralPillTextDark = darkBackground;
+
+  /// Devuelve el color de texto para cualquier elemento con fondo Coral (igual al fondo de la app).
+  static Color coralText(bool isDark) =>
+      isDark ? darkBackground : lightBackground;
+
+  /// Estilo de texto con weight 450 para el elemento activo de la parte superior y de la lista activa en Boards.
+  static TextStyle activeElementTextStyle({
+    required double fontSize,
+    required Color color,
+    double letterSpacing = 1.1,
+  }) {
+    return GoogleFonts.raleway(
+      fontSize: fontSize,
+      fontWeight: FontWeight.w500,
+      fontVariations: const [FontVariation('wght', 450)],
+      color: color,
+      letterSpacing: letterSpacing,
+    );
+  }
 
   // --- 8 Colores Pastel para Tarjetas y Tableros ---
   static const List<PastelPreset> pastelPresets = [
@@ -111,7 +131,7 @@ class AmodoroTheme {
   static Color darkenForPerspective(Color base, [double amount = 0.22]) {
     final hsl = HSLColor.fromColor(base);
     final darkerLightness = (hsl.lightness - amount).clamp(0.06, 0.92);
-    final boostedSat = (hsl.saturation + 0.06).clamp(0.0, 1.0);
+    final boostedSat = (hsl.saturation + 0.08).clamp(0.0, 1.0);
     return hsl
         .withLightness(darkerLightness)
         .withSaturation(boostedSat)
@@ -119,19 +139,23 @@ class AmodoroTheme {
   }
 
   /// Decoración flotante en perspectiva:
-  /// - Sin borde superior ni izquierdo (0px).
-  /// - Solo borde inferior y derecho visible de [thickness] px (por defecto 2.5px, o 2.0px en la píldora superior)
-  ///   en un tono más oscuro, sin difuminado (blurRadius: 0).
+  /// - Por defecto sin borde superior ni izquierdo (0px), o con un borde completo de 1px si se pasa [fullBorderColor] (usado en las cards neutras de BOARDS para no perderse en el fondo).
+  /// - Borde inferior y derecho visible de [thickness] px en un tono más oscuro o en el color elegido ([perspectiveEdgeColor]), sin difuminado (blurRadius: 0).
   static BoxDecoration floatingPerspectiveBox({
     required Color color,
     double radius = 22,
     double thickness = 2.5,
     Color? perspectiveEdgeColor,
+    Color? fullBorderColor,
+    double fullBorderWidth = 1.0,
   }) {
     final edge = perspectiveEdgeColor ?? darkenForPerspective(color, 0.22);
     return BoxDecoration(
       color: color,
       borderRadius: BorderRadius.circular(radius),
+      border: fullBorderColor != null
+          ? Border.all(color: fullBorderColor, width: fullBorderWidth)
+          : null,
       boxShadow: [
         BoxShadow(
           color: edge,
@@ -155,7 +179,7 @@ class AmodoroTheme {
         : const Color(0xFFE5DDD5);
   }
 
-  /// Icono de Material Design 3 con weight 100 obligatorio en toda la aplicación.
+  /// Icono de Material Design 3 con weight 200 obligatorio en toda la aplicación.
   static Widget sysIcon(
     IconData iconData, {
     double size = 20,
@@ -165,13 +189,13 @@ class AmodoroTheme {
       iconData,
       size: size,
       color: color,
-      weight: 100,
+      weight: 200,
       grade: 0,
       opticalSize: 24,
     );
   }
 
-  /// Mapea el nombre de icono de un tablero a un icono Material Symbols weight 100.
+  /// Mapea el nombre de icono de un tablero a un icono Material Symbols weight 200.
   static IconData boardIconFromName(String iconName, String slug) {
     final key = iconName.toLowerCase().trim();
     if (slug == 'actividades' || key == 'schedule' || key == 'clock') {
@@ -199,7 +223,7 @@ class AmodoroTheme {
       case 'flight':
       case 'travel':
         return Symbols.flight;
-      case 'Menu_book':
+      case 'menu_book':
       case 'book':
         return Symbols.menu_book;
       case 'palette':
@@ -266,46 +290,46 @@ class AmodoroTheme {
       default:
         return GoogleFonts.raleway(
           fontSize: px,
-          fontWeight: FontWeight.w300,
+          fontWeight: FontWeight.w400,
           color: color,
           height: 1.38,
         );
     }
   }
 
-  static TextTheme _buildRalewayLightTextTheme(Color inkColor) {
+  static TextTheme _buildRalewayRegularTextTheme(Color inkColor) {
     final base = GoogleFonts.ralewayTextTheme();
     return base.copyWith(
       displayLarge: GoogleFonts.raleway(
-          fontWeight: FontWeight.w300, color: inkColor),
+          fontWeight: FontWeight.w400, color: inkColor),
       displayMedium: GoogleFonts.raleway(
-          fontWeight: FontWeight.w300, color: inkColor),
+          fontWeight: FontWeight.w400, color: inkColor),
       displaySmall: GoogleFonts.raleway(
-          fontWeight: FontWeight.w300, color: inkColor),
+          fontWeight: FontWeight.w400, color: inkColor),
       headlineLarge: GoogleFonts.raleway(
-          fontWeight: FontWeight.w300, color: inkColor),
+          fontWeight: FontWeight.w400, color: inkColor),
       headlineMedium: GoogleFonts.raleway(
-          fontWeight: FontWeight.w300, color: inkColor),
+          fontWeight: FontWeight.w400, color: inkColor),
       headlineSmall: GoogleFonts.raleway(
-          fontWeight: FontWeight.w300, color: inkColor),
+          fontWeight: FontWeight.w400, color: inkColor),
       titleLarge: GoogleFonts.raleway(
-          fontWeight: FontWeight.w300, color: inkColor),
+          fontWeight: FontWeight.w400, color: inkColor),
       titleMedium: GoogleFonts.raleway(
-          fontWeight: FontWeight.w300, color: inkColor),
+          fontWeight: FontWeight.w400, color: inkColor),
       titleSmall: GoogleFonts.raleway(
-          fontWeight: FontWeight.w300, color: inkColor),
+          fontWeight: FontWeight.w400, color: inkColor),
       bodyLarge: GoogleFonts.raleway(
-          fontWeight: FontWeight.w300, color: inkColor),
+          fontWeight: FontWeight.w400, color: inkColor),
       bodyMedium: GoogleFonts.raleway(
-          fontWeight: FontWeight.w300, color: inkColor),
+          fontWeight: FontWeight.w400, color: inkColor),
       bodySmall: GoogleFonts.raleway(
-          fontWeight: FontWeight.w300, color: inkColor),
+          fontWeight: FontWeight.w400, color: inkColor),
       labelLarge: GoogleFonts.raleway(
-          fontWeight: FontWeight.w300, color: inkColor, letterSpacing: 1.1),
+          fontWeight: FontWeight.w400, color: inkColor, letterSpacing: 1.1),
       labelMedium: GoogleFonts.raleway(
-          fontWeight: FontWeight.w300, color: inkColor),
+          fontWeight: FontWeight.w400, color: inkColor),
       labelSmall: GoogleFonts.raleway(
-          fontWeight: FontWeight.w300, color: inkColor),
+          fontWeight: FontWeight.w400, color: inkColor),
     );
   }
 
@@ -334,10 +358,10 @@ class AmodoroTheme {
       scaffoldBackgroundColor: lightBackground,
       canvasColor: lightBackground,
       cardColor: lightContainer,
-      textTheme: _buildRalewayLightTextTheme(lightInk),
+      textTheme: _buildRalewayRegularTextTheme(lightInk),
       iconTheme: const IconThemeData(
         color: lightInk,
-        weight: 100,
+        weight: 200,
         opticalSize: 24,
       ),
       appBarTheme: AppBarTheme(
@@ -347,7 +371,7 @@ class AmodoroTheme {
         scrolledUnderElevation: 0,
         titleTextStyle: GoogleFonts.raleway(
           fontSize: 17,
-          fontWeight: FontWeight.w300,
+          fontWeight: FontWeight.w400,
           color: lightInk,
         ),
       ),
@@ -379,10 +403,10 @@ class AmodoroTheme {
       scaffoldBackgroundColor: darkBackground,
       canvasColor: darkBackground,
       cardColor: darkContainer,
-      textTheme: _buildRalewayLightTextTheme(darkInk),
+      textTheme: _buildRalewayRegularTextTheme(darkInk),
       iconTheme: const IconThemeData(
         color: darkInk,
-        weight: 100,
+        weight: 200,
         opticalSize: 24,
       ),
       appBarTheme: AppBarTheme(
@@ -392,7 +416,7 @@ class AmodoroTheme {
         scrolledUnderElevation: 0,
         titleTextStyle: GoogleFonts.raleway(
           fontSize: 17,
-          fontWeight: FontWeight.w300,
+          fontWeight: FontWeight.w400,
           color: darkInk,
         ),
       ),

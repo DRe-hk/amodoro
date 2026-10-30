@@ -16,13 +16,16 @@ class FlatAvatarOption {
   });
 }
 
+/// Alias for [FlatAvatarOption].
+typedef AvatarOption = FlatAvatarOption;
+
 /// The 5 predefined flat animal avatars in Amodoro.
 const List<FlatAvatarOption> kFlatAvatars = [
   FlatAvatarOption(
     id: 'cat',
     label: 'Gato',
     background: Color(0xFFF5E0B5),
-    primary: Color(0xFFE08A4B),
+    primary: Color(0xFF232328),
   ),
   FlatAvatarOption(
     id: 'hippo',
@@ -71,6 +74,9 @@ class FlatAvatarBadge extends StatelessWidget {
     this.showPerspectiveBorder = false,
   });
 
+  /// The list of predefined avatar presets.
+  static List<FlatAvatarOption> get presets => kFlatAvatars;
+
   @override
   Widget build(BuildContext context) {
     final option = flatAvatarFor(avatarId);
@@ -104,6 +110,16 @@ class FlatAvatarBadge extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Primary avatar widget component for [FlatAvatarBadge].
+class FlatAvatar extends FlatAvatarBadge {
+  const FlatAvatar({
+    super.key,
+    required super.avatarId,
+    super.size = 48.0,
+    super.showPerspectiveBorder = false,
+  });
 }
 
 /// Horizontal selector row for picking one of the 5 flat avatars.
@@ -179,7 +195,9 @@ class FlatAvatarSelector extends StatelessWidget {
                         fontSize: 11.5,
                         fontWeight:
                             isSelected ? FontWeight.w600 : FontWeight.w400,
-                        color: isSelected ? ink : ink.withOpacity(0.65),
+                        color: isSelected
+                            ? ink
+                            : ink.withValues(alpha: 0.65),
                       ),
                     ),
                   ],
@@ -231,15 +249,20 @@ class _FlatAnimalPainter extends CustomPainter {
   }
 
   // ---------------------------------------------------------------------------
-  // 1. CAT (Gato)
+  // 1. CAT (Gato - Black Cat!)
   // ---------------------------------------------------------------------------
   void _paintCat(Canvas canvas, double w, double h) {
-    final primary = Paint()..color = primaryColor;
-    final innerEarPaint = Paint()..color = const Color(0xFFFFB8A6);
-    final muzzlePaint = Paint()..color = const Color(0xFFFFF9F2);
-    final darkPaint = Paint()..color = const Color(0xFF261C14);
-    final nosePaint = Paint()..color = const Color(0xFFE06A55);
-    final blushPaint = Paint()..color = const Color(0x38F98870);
+    final catBlack = Paint()..color = const Color(0xFF232328);
+    final innerEarPaint = Paint()..color = const Color(0xFF3A3A44);
+    final muzzlePaint = Paint()..color = const Color(0xFF2D2D34);
+    final amberEyePaint = Paint()..color = const Color(0xFFF5C542);
+    final pupilPaint = Paint()..color = const Color(0xFF141418);
+    final nosePaint = Paint()..color = const Color(0xFF4A4A57);
+    final mouthStroke = Paint()
+      ..color = const Color(0xFF4A4A57)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w * 0.024
+      ..strokeCap = StrokeCap.round;
     final shinePaint = Paint()..color = Colors.white;
 
     // Ears
@@ -248,7 +271,7 @@ class _FlatAnimalPainter extends CustomPainter {
       ..lineTo(w * 0.20, h * 0.16)
       ..lineTo(w * 0.44, h * 0.30)
       ..close();
-    canvas.drawPath(leftEar, primary);
+    canvas.drawPath(leftEar, catBlack);
 
     final leftInner = Path()
       ..moveTo(w * 0.25, h * 0.40)
@@ -262,7 +285,7 @@ class _FlatAnimalPainter extends CustomPainter {
       ..lineTo(w * 0.80, h * 0.16)
       ..lineTo(w * 0.78, h * 0.44)
       ..close();
-    canvas.drawPath(rightEar, primary);
+    canvas.drawPath(rightEar, catBlack);
 
     final rightInner = Path()
       ..moveTo(w * 0.61, h * 0.32)
@@ -272,9 +295,9 @@ class _FlatAnimalPainter extends CustomPainter {
     canvas.drawPath(rightInner, innerEarPaint);
 
     // Head
-    canvas.drawCircle(Offset(w * 0.5, h * 0.56), w * 0.33, primary);
+    canvas.drawCircle(Offset(w * 0.5, h * 0.56), w * 0.33, catBlack);
 
-    // Muzzle patch
+    // Subtle dark muzzle patch for volumetric form
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset(w * 0.5, h * 0.66),
@@ -284,15 +307,49 @@ class _FlatAnimalPainter extends CustomPainter {
       muzzlePaint,
     );
 
-    // Eyes
-    canvas.drawCircle(Offset(w * 0.37, h * 0.53), w * 0.045, darkPaint);
-    canvas.drawCircle(Offset(w * 0.63, h * 0.53), w * 0.045, darkPaint);
+    // Expressive golden-amber cat eyes!
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(w * 0.37, h * 0.53),
+        width: w * 0.12,
+        height: h * 0.14,
+      ),
+      amberEyePaint,
+    );
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(w * 0.63, h * 0.53),
+        width: w * 0.12,
+        height: h * 0.14,
+      ),
+      amberEyePaint,
+    );
 
-    // Eye catchlights
-    canvas.drawCircle(Offset(w * 0.385, h * 0.515), w * 0.016, shinePaint);
-    canvas.drawCircle(Offset(w * 0.645, h * 0.515), w * 0.016, shinePaint);
+    // Pupils (soft vertical oval for feline gaze)
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(w * 0.37, h * 0.53),
+        width: w * 0.065,
+        height: h * 0.11,
+      ),
+      pupilPaint,
+    );
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(w * 0.63, h * 0.53),
+        width: w * 0.065,
+        height: h * 0.11,
+      ),
+      pupilPaint,
+    );
 
-    // Nose
+    // Catchlights (sparkle)
+    canvas.drawCircle(Offset(w * 0.385, h * 0.505), w * 0.020, shinePaint);
+    canvas.drawCircle(Offset(w * 0.355, h * 0.550), w * 0.010, shinePaint);
+    canvas.drawCircle(Offset(w * 0.645, h * 0.505), w * 0.020, shinePaint);
+    canvas.drawCircle(Offset(w * 0.615, h * 0.550), w * 0.010, shinePaint);
+
+    // Dark slate nose
     final nosePath = Path()
       ..moveTo(w * 0.46, h * 0.61)
       ..lineTo(w * 0.54, h * 0.61)
@@ -300,22 +357,16 @@ class _FlatAnimalPainter extends CustomPainter {
       ..close();
     canvas.drawPath(nosePath, nosePaint);
 
-    // Mouth
-    final mouthStroke = Paint()
-      ..color = const Color(0xFF5C3D28)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = w * 0.024
-      ..strokeCap = StrokeCap.round;
-
+    // Subtle dark muzzle line / smile
     final mouthPath = Path()
       ..moveTo(w * 0.42, h * 0.68)
       ..quadraticBezierTo(w * 0.46, h * 0.70, w * 0.50, h * 0.655)
       ..quadraticBezierTo(w * 0.54, h * 0.70, w * 0.58, h * 0.68);
     canvas.drawPath(mouthPath, mouthStroke);
 
-    // Whiskers
+    // Crisp white/light whiskers (stand out gracefully on black fur)
     final whiskerPaint = Paint()
-      ..color = const Color(0xFF6B4B35).withOpacity(0.55)
+      ..color = Colors.white.withValues(alpha: 0.65)
       ..style = PaintingStyle.stroke
       ..strokeWidth = w * 0.02
       ..strokeCap = StrokeCap.round;
@@ -329,10 +380,6 @@ class _FlatAnimalPainter extends CustomPainter {
         Offset(w * 0.72, h * 0.63), Offset(w * 0.89, h * 0.60), whiskerPaint);
     canvas.drawLine(
         Offset(w * 0.72, h * 0.68), Offset(w * 0.89, h * 0.71), whiskerPaint);
-
-    // Blush
-    canvas.drawCircle(Offset(w * 0.28, h * 0.61), w * 0.05, blushPaint);
-    canvas.drawCircle(Offset(w * 0.72, h * 0.61), w * 0.05, blushPaint);
   }
 
   // ---------------------------------------------------------------------------
@@ -590,7 +637,7 @@ class _FlatAnimalPainter extends CustomPainter {
 
     // Whiskers
     final whiskerPaint = Paint()
-      ..color = primary.color.withOpacity(0.55)
+      ..color = primary.color.withValues(alpha: 0.55)
       ..style = PaintingStyle.stroke
       ..strokeWidth = w * 0.018
       ..strokeCap = StrokeCap.round;
@@ -611,7 +658,7 @@ class _FlatAnimalPainter extends CustomPainter {
   }
 
   // ---------------------------------------------------------------------------
-  // 5. GRAY KITTEN (Gatito gris - baby proportioned!)
+  // 5. GRAY KITTEN (Gatito gris - almost entirely monochromatic gray!)
   // ---------------------------------------------------------------------------
   void _paintGrayKitten(Canvas canvas, double w, double h) {
     final primary = Paint()..color = primaryColor;
@@ -620,11 +667,21 @@ class _FlatAnimalPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = w * 0.024
       ..strokeCap = StrokeCap.round;
-    final innerEarPaint = Paint()..color = const Color(0xFFFFB5C5);
-    final muzzlePaint = Paint()..color = const Color(0xFFF3F6FA);
+    // Soft monochromatic gray inner ears (not pink!)
+    final innerEarPaint = Paint()..color = const Color(0xFFB0BAC7);
+    // Cool pale silver-gray muzzle (tonal gray!)
+    final muzzlePaint = Paint()..color = const Color(0xFFDCE2EC);
     final darkPaint = Paint()..color = const Color(0xFF1B2028);
-    final pinkNose = Paint()..color = const Color(0xFFFF8DA1);
-    final blushPaint = Paint()..color = const Color(0x35FF6B8B);
+    // Slate gray nose (not pink!)
+    final grayNose = Paint()..color = const Color(0xFF6E737B);
+    final mouthStroke = Paint()
+      ..color = const Color(0xFF5A667A)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w * 0.02
+      ..strokeCap = StrokeCap.round;
+    // Monochromatic subtle cool gray cheek tint
+    final grayCheekPaint = Paint()
+      ..color = const Color(0xFF6E737B).withValues(alpha: 0.14);
     final shinePaint = Paint()..color = Colors.white;
 
     // Kitten pointed ears
@@ -666,14 +723,15 @@ class _FlatAnimalPainter extends CustomPainter {
       primary,
     );
 
-    // Tabby forehead kitten stripes
-    canvas.drawLine(Offset(w * 0.5, h * 0.38), Offset(w * 0.5, h * 0.45), darkStripe);
+    // Tabby forehead kitten stripes in slate gray
+    canvas.drawLine(
+        Offset(w * 0.5, h * 0.38), Offset(w * 0.5, h * 0.45), darkStripe);
     canvas.drawLine(
         Offset(w * 0.43, h * 0.39), Offset(w * 0.44, h * 0.45), darkStripe);
     canvas.drawLine(
         Offset(w * 0.57, h * 0.39), Offset(w * 0.56, h * 0.45), darkStripe);
 
-    // Baby muzzle patch
+    // Baby muzzle patch in pale silver-gray
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset(w * 0.5, h * 0.69),
@@ -696,30 +754,24 @@ class _FlatAnimalPainter extends CustomPainter {
     canvas.drawCircle(Offset(w * 0.67, h * 0.53), w * 0.024, shinePaint);
     canvas.drawCircle(Offset(w * 0.63, h * 0.58), w * 0.012, shinePaint);
 
-    // Tiny pink button nose
+    // Tiny button nose in slate gray (almost totally gray!)
     final nosePath = Path()
       ..moveTo(w * 0.47, h * 0.65)
       ..lineTo(w * 0.53, h * 0.65)
       ..lineTo(w * 0.50, h * 0.68)
       ..close();
-    canvas.drawPath(nosePath, pinkNose);
+    canvas.drawPath(nosePath, grayNose);
 
-    // Tiny baby 'w' smile
-    final mouthStroke = Paint()
-      ..color = const Color(0xFF6B7280)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = w * 0.02
-      ..strokeCap = StrokeCap.round;
-
+    // Tiny baby 'w' smile in slate gray
     final mouthPath = Path()
       ..moveTo(w * 0.44, h * 0.71)
       ..quadraticBezierTo(w * 0.47, h * 0.73, w * 0.50, h * 0.69)
       ..quadraticBezierTo(w * 0.53, h * 0.73, w * 0.56, h * 0.71);
     canvas.drawPath(mouthPath, mouthStroke);
 
-    // Delicate kitten whiskers
+    // Delicate kitten whiskers in crisp soft white
     final whiskerPaint = Paint()
-      ..color = Colors.white.withOpacity(0.7)
+      ..color = Colors.white.withValues(alpha: 0.70)
       ..style = PaintingStyle.stroke
       ..strokeWidth = w * 0.018
       ..strokeCap = StrokeCap.round;
@@ -734,9 +786,9 @@ class _FlatAnimalPainter extends CustomPainter {
     canvas.drawLine(
         Offset(w * 0.72, h * 0.70), Offset(w * 0.88, h * 0.72), whiskerPaint);
 
-    // Rosy baby cheeks
-    canvas.drawCircle(Offset(w * 0.25, h * 0.64), w * 0.05, blushPaint);
-    canvas.drawCircle(Offset(w * 0.75, h * 0.64), w * 0.05, blushPaint);
+    // Subtle cool gray cheek shading (pure monochromatic)
+    canvas.drawCircle(Offset(w * 0.25, h * 0.64), w * 0.05, grayCheekPaint);
+    canvas.drawCircle(Offset(w * 0.75, h * 0.64), w * 0.05, grayCheekPaint);
   }
 
   @override

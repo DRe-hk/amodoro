@@ -7,7 +7,8 @@ import {
   getRelativeLuminance,
   interpolatePillColor,
 } from "../src/lib/contrast";
-import { ensureInitialSeed, getAllUsers } from "../src/lib/auth";
+import { ensureInitialSeed, getAllUsers, registerNewUser } from "../src/lib/auth";
+import { addBoardItem, listBoardsWithItems } from "../src/lib/boards";
 import {
   spinRouletteDecision,
   startVotingDecision,
@@ -58,10 +59,27 @@ test("Auto-contraste de fondos pastel M3 e interpolación de la píldora desliza
   assert.equal(atSettings.bg.toUpperCase(), pills.settings.bg.toUpperCase());
 });
 
-test("Motor de Decisión: Ruleta y Votación ciega de 4-5 actividades con acuerdo y desempate", () => {
+test("Motor de Decisión: Ruleta y Votación ciega de 4-5 actividades con acuerdo y desempate", async () => {
   ensureInitialSeed();
-  const [userA, userB] = getAllUsers();
+  let [userA, userB] = getAllUsers();
+  if (!userA) {
+    userA = await registerNewUser({ displayName: "UserA", avatarId: "cat" });
+  }
+  if (!userB) {
+    userB = await registerNewUser({ displayName: "UserB", avatarId: "rabbit" });
+  }
   assert.ok(userA && userB);
+
+  const { actividadesBoardId, itemsByBoardId } = listBoardsWithItems();
+  if ((itemsByBoardId[actividadesBoardId]?.length ?? 0) < 5) {
+    for (let i = 1; i <= 5; i++) {
+      addBoardItem({
+        boardId: actividadesBoardId,
+        title: `Actividad ${i}`,
+        userId: userA.id,
+      });
+    }
+  }
 
   // 1. Roulette picks a single random activity and resolves immediately
   const roulette = spinRouletteDecision();

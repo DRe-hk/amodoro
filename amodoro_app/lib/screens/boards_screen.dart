@@ -52,6 +52,23 @@ class _BoardsScreenState extends State<BoardsScreen> {
     return boards.first;
   }
 
+  /// Devuelve un tono más saturado/intenso del color elegido para el botón de añadir (con texto blanco)
+  /// y para que los bordes elegidos se distingan claramente.
+  Color _accentFromHex(String hex) {
+    final base = AmodoroTheme.parseHexColor(
+      hex,
+      fallback: AmodoroTheme.coralPillLight,
+    );
+    final hsl = HSLColor.fromColor(base);
+    if (hsl.lightness > 0.72) {
+      return hsl
+          .withLightness(0.56)
+          .withSaturation((hsl.saturation + 0.22).clamp(0.35, 0.90))
+          .toColor();
+    }
+    return base;
+  }
+
   void _openDecideModal() {
     showModalBottomSheet(
       context: context,
@@ -65,11 +82,11 @@ class _BoardsScreenState extends State<BoardsScreen> {
     );
   }
 
-  /// Submenú para crear o editar un tablero (nombre, icono, color pastel y opción de eliminar)
+  /// Submenú para crear o editar un tablero (nombre, icono, color de borde/botón y opción de eliminar)
   Future<void> _showBoardSubmenu({BoardModel? existing}) async {
     final titleCtrl = TextEditingController(text: existing?.title ?? '');
     String selectedIcon = existing?.icon ?? 'bookmark';
-    String selectedColor = existing?.bgColor ?? '#F4EFE8';
+    String selectedColor = existing?.bgColor ?? '#FFDAD6';
     final isDefaultPendientes = existing?.slug == 'actividades';
 
     final changed = await showModalBottomSheet<bool>(
@@ -77,6 +94,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
         final surface = Theme.of(ctx).scaffoldBackgroundColor;
         final boxSurface = Theme.of(ctx).colorScheme.surfaceContainer;
         return StatefulBuilder(
@@ -152,7 +170,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                 iconData,
                                 size: 20,
                                 color: sel
-                                    ? AmodoroTheme.coralPillTextLight
+                                    ? AmodoroTheme.coralText(isDark)
                                     : null,
                               ),
                             ),
@@ -162,7 +180,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                     ),
                     const SizedBox(height: 14),
                     const Text(
-                      'COLOR DEL TABLERO',
+                      'COLOR DE BORDE Y BOTÓN DE LA LISTA',
                       style: TextStyle(fontSize: 11, letterSpacing: 1.2),
                     ),
                     const SizedBox(height: 8),
@@ -219,7 +237,9 @@ class _BoardsScreenState extends State<BoardsScreen> {
                       child: Container(
                         height: 46,
                         decoration: AmodoroTheme.floatingPerspectiveBox(
-                          color: AmodoroTheme.coralPillLight,
+                          color: isDark
+                              ? AmodoroTheme.coralPillDark
+                              : AmodoroTheme.coralPillLight,
                           radius: 999,
                           thickness: 2.5,
                         ),
@@ -228,10 +248,10 @@ class _BoardsScreenState extends State<BoardsScreen> {
                             existing == null
                                 ? 'CREAR LISTA'
                                 : 'GUARDAR CAMBIOS',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
                               letterSpacing: 1.4,
-                              color: AmodoroTheme.coralPillTextLight,
+                              color: AmodoroTheme.coralText(isDark),
                             ),
                           ),
                         ),
@@ -290,20 +310,39 @@ class _BoardsScreenState extends State<BoardsScreen> {
     }
   }
 
-  /// Submenú para añadir o editar un elemento (título, notas, categoría, emoji, color, imagen, link y eliminar)
+  /// Submenú para añadir o editar un elemento:
+  /// - La categoría es un menú desplegable con las listas existentes.
+  /// - El color elegido se aplica al borde del elemento.
   Future<void> _showItemSubmenu({
     required BoardModel board,
     BoardCardItem? existing,
   }) async {
     final titleCtrl = TextEditingController(text: existing?.title ?? '');
     final notesCtrl = TextEditingController(text: existing?.notes ?? '');
-    final categoryCtrl = TextEditingController(
-      text: existing?.categoryTag ??
-          (board.slug == 'actividades' ? 'PENDIENTE' : board.title),
-    );
     final emojiCtrl = TextEditingController(text: existing?.emoji ?? '');
     final linkCtrl = TextEditingController(text: existing?.url ?? '');
-    String bgColor = existing?.bgColor ?? '#FFDAD6';
+
+    // Construir opciones del desplegable de Categoría a partir de las listas existentes
+    final categoryOptions = <String>{
+      for (final b in widget.sync.boards) b.title.toUpperCase(),
+    }.toList();
+    if (categoryOptions.isEmpty) {
+      categoryOptions.add('PENDIENTES');
+    }
+
+    String initialCat = (existing?.categoryTag ??
+            (board.slug == 'actividades'
+                ? (categoryOptions.length > 1
+                    ? categoryOptions[1]
+                    : categoryOptions.first)
+                : board.title))
+        .toUpperCase();
+    if (!categoryOptions.contains(initialCat)) {
+      categoryOptions.insert(0, initialCat);
+    }
+    String selectedCategory = initialCat;
+
+    String bgColor = existing?.bgColor ?? board.bgColor;
     String? imageDataUrl;
     bool saving = false;
 
@@ -312,10 +351,12 @@ class _BoardsScreenState extends State<BoardsScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
         final surface = Theme.of(ctx).scaffoldBackgroundColor;
         final boxSurface = Theme.of(ctx).colorScheme.surfaceContainer;
         return StatefulBuilder(
           builder: (ctx, setModalState) {
+            final boardButtonColor = _accentFromHex(board.bgColor);
             return Container(
               padding: EdgeInsets.fromLTRB(
                 22,
@@ -343,9 +384,11 @@ class _BoardsScreenState extends State<BoardsScreen> {
                     const SizedBox(height: 14),
                     Row(
                       children: [
+                        // Menú desplegable de Categoría con las listas existentes
                         Expanded(
                           flex: 3,
                           child: Container(
+                            height: 48,
                             padding:
                                 const EdgeInsets.symmetric(horizontal: 14),
                             decoration: AmodoroTheme.floatingPerspectiveBox(
@@ -353,12 +396,33 @@ class _BoardsScreenState extends State<BoardsScreen> {
                               radius: 16,
                               thickness: 2.0,
                             ),
-                            child: TextField(
-                              controller: categoryCtrl,
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                labelText: 'CATEGORÍA (EJ. PELÍCULA, JUEGO)',
-                                labelStyle: TextStyle(fontSize: 10),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: selectedCategory,
+                                isExpanded: true,
+                                icon: AmodoroTheme.sysIcon(
+                                  Symbols.expand_more,
+                                  size: 18,
+                                ),
+                                items: categoryOptions.map((cat) {
+                                  return DropdownMenuItem<String>(
+                                    value: cat,
+                                    child: Text(
+                                      cat,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 11.5,
+                                        letterSpacing: 1.1,
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setModalState(
+                                        () => selectedCategory = val);
+                                  }
+                                },
                               ),
                             ),
                           ),
@@ -367,6 +431,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                         Expanded(
                           flex: 2,
                           child: Container(
+                            height: 48,
                             padding:
                                 const EdgeInsets.symmetric(horizontal: 14),
                             decoration: AmodoroTheme.floatingPerspectiveBox(
@@ -374,12 +439,15 @@ class _BoardsScreenState extends State<BoardsScreen> {
                               radius: 16,
                               thickness: 2.0,
                             ),
-                            child: TextField(
-                              controller: emojiCtrl,
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                labelText: 'EMOJI OPC.',
-                                labelStyle: TextStyle(fontSize: 10),
+                            child: Center(
+                              child: TextField(
+                                controller: emojiCtrl,
+                                decoration: const InputDecoration(
+                                  border: InputBorder.none,
+                                  hintText: 'EMOJI OPC.',
+                                  hintStyle: TextStyle(fontSize: 10.5),
+                                  isDense: true,
+                                ),
                               ),
                             ),
                           ),
@@ -500,7 +568,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                     const SizedBox(height: 14),
 
                     const Text(
-                      'COLOR',
+                      'COLOR DEL BORDE',
                       style: TextStyle(fontSize: 11, letterSpacing: 1.2),
                     ),
                     const SizedBox(height: 8),
@@ -549,7 +617,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                   boardId: board.id,
                                   title: titleCtrl.text.trim(),
                                   notes: notesCtrl.text.trim(),
-                                  categoryTag: categoryCtrl.text.trim(),
+                                  categoryTag: selectedCategory,
                                   emoji: emojiCtrl.text.trim(),
                                   bgColor: bgColor,
                                   mediaDataUrl: imageDataUrl,
@@ -560,7 +628,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                   itemId: existing.id,
                                   title: titleCtrl.text.trim(),
                                   notes: notesCtrl.text.trim(),
-                                  categoryTag: categoryCtrl.text.trim(),
+                                  categoryTag: selectedCategory,
                                   emoji: emojiCtrl.text.trim(),
                                   bgColor: bgColor,
                                   linkUrl: linkCtrl.text.trim(),
@@ -571,9 +639,12 @@ class _BoardsScreenState extends State<BoardsScreen> {
                       child: Container(
                         height: 46,
                         decoration: AmodoroTheme.floatingPerspectiveBox(
-                          color: AmodoroTheme.coralPillLight,
+                          color: boardButtonColor,
                           radius: 999,
                           thickness: 2.5,
+                          perspectiveEdgeColor:
+                              AmodoroTheme.darkenForPerspective(
+                                  boardButtonColor, 0.20),
                         ),
                         child: Center(
                           child: Text(
@@ -585,7 +656,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                             style: const TextStyle(
                               fontSize: 12,
                               letterSpacing: 1.4,
-                              color: AmodoroTheme.coralPillTextLight,
+                              color: Colors.white,
                             ),
                           ),
                         ),
@@ -603,7 +674,9 @@ class _BoardsScreenState extends State<BoardsScreen> {
                           child: Container(
                             height: 44,
                             decoration: AmodoroTheme.floatingPerspectiveBox(
-                              color: const Color(0xFFC8E6C9),
+                              color: isDark
+                                  ? AmodoroTheme.darkContainer
+                                  : AmodoroTheme.lightContainer,
                               radius: 999,
                               thickness: 2.0,
                             ),
@@ -613,7 +686,6 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                 AmodoroTheme.sysIcon(
                                   Symbols.schedule,
                                   size: 18,
-                                  color: const Color(0xFF1F1B18),
                                 ),
                                 const SizedBox(width: 8),
                                 const Text(
@@ -621,7 +693,6 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                   style: TextStyle(
                                     fontSize: 11.5,
                                     letterSpacing: 1.3,
-                                    color: Color(0xFF1F1B18),
                                   ),
                                 ),
                               ],
@@ -687,6 +758,10 @@ class _BoardsScreenState extends State<BoardsScreen> {
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isPendientes = activeBoard.slug == 'actividades';
+    final neutralCardFill =
+        isDark ? AmodoroTheme.darkContainer : AmodoroTheme.lightContainer;
+    final neutralCardOutline =
+        isDark ? const Color(0xFF383E3A) : const Color(0xFFE2DDD4);
 
     // Construcción de las 2 columnas estilo masonry según el boceto:
     // En PENDIENTES, el primer elemento arriba a la izquierda de la columna 1 es el botón compacto DECIDIR.
@@ -706,6 +781,9 @@ class _BoardsScreenState extends State<BoardsScreen> {
           board: activeBoard,
           item: item,
           isPendientes: isPendientes,
+          neutralCardFill: neutralCardFill,
+          neutralCardOutline: neutralCardOutline,
+          isDark: isDark,
         ),
       );
       if (isPendientes) {
@@ -723,44 +801,54 @@ class _BoardsScreenState extends State<BoardsScreen> {
       }
     }
 
+    final addButtonColor = _accentFromHex(activeBoard.bgColor);
+
     return Column(
       children: [
         // Fila superior de tableros (PENDIENTES, MÚSICA, PELIS, SERIES, JUEGOS...) + botón [+]
-        // Tal como en el boceto: tarjetas con icono arriba y título abajo, borde en perspectiva
+        // Más pequeñas verticalmente (height: 46).
+        // Si está activa: fondo Coral, texto color del fondo de la app y weight 450.
+        // Si está inactiva: fondo neutro con borde 1px + borde en perspectiva del color elegido de esa lista.
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
+          padding: const EdgeInsets.fromLTRB(18, 6, 18, 10),
           child: Row(
             children: [
               ...widget.sync.boards.map((b) {
                 final selected = b.id == activeBoard.id;
+                final boardChosenEdgeColor = _accentFromHex(b.bgColor);
                 final tileBg = selected
                     ? (isDark
                         ? AmodoroTheme.coralPillDark
                         : AmodoroTheme.coralPillLight)
-                    : AmodoroTheme.parseHexColor(b.bgColor);
+                    : neutralCardFill;
                 final tileInk = selected
-                    ? (isDark
-                        ? AmodoroTheme.coralPillTextDark
-                        : AmodoroTheme.coralPillTextLight)
-                    : AmodoroTheme.getContrastingInk(tileBg);
+                    ? AmodoroTheme.coralText(isDark)
+                    : (isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk);
 
                 return Padding(
-                  padding: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.only(right: 10),
                   child: GestureDetector(
                     onTap: () => setState(() => _selectedBoardId = b.id),
                     onLongPress: () => _showBoardSubmenu(existing: b),
                     child: Container(
-                      width: 96,
-                      height: 62,
+                      width: 94,
+                      height: 46,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
-                        vertical: 6,
+                        vertical: 4,
                       ),
                       decoration: AmodoroTheme.floatingPerspectiveBox(
                         color: tileBg,
-                        radius: 18,
-                        thickness: selected ? 3.0 : 2.2,
+                        radius: 15,
+                        thickness: selected ? 2.5 : 2.2,
+                        fullBorderColor: selected ? null : neutralCardOutline,
+                        fullBorderWidth: 1.0,
+                        perspectiveEdgeColor: selected
+                            ? (isDark
+                                ? AmodoroTheme.coralPillBorderDark
+                                : AmodoroTheme.coralPillBorderLight)
+                            : boardChosenEdgeColor,
                       ),
                       child: Stack(
                         children: [
@@ -773,32 +861,39 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                     b.icon,
                                     b.slug,
                                   ),
-                                  size: 20,
+                                  size: 16,
                                   color: tileInk,
                                 ),
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 2),
                                 Text(
                                   b.title.toUpperCase(),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    letterSpacing: 1.1,
-                                    color: tileInk,
-                                  ),
+                                  style: selected
+                                      ? AmodoroTheme.activeElementTextStyle(
+                                          fontSize: 9.5,
+                                          color: tileInk,
+                                          letterSpacing: 1.0,
+                                        )
+                                      : TextStyle(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w400,
+                                          letterSpacing: 1.0,
+                                          color: tileInk,
+                                        ),
                                 ),
                               ],
                             ),
                           ),
                           Positioned(
-                            top: 0,
-                            right: 0,
+                            top: -2,
+                            right: -2,
                             child: GestureDetector(
                               onTap: () => _showBoardSubmenu(existing: b),
                               child: AmodoroTheme.sysIcon(
                                 Symbols.more_horiz,
-                                size: 14,
-                                color: tileInk.withValues(alpha: 0.7),
+                                size: 13,
+                                color: tileInk.withValues(alpha: 0.72),
                               ),
                             ),
                           ),
@@ -809,21 +904,21 @@ class _BoardsScreenState extends State<BoardsScreen> {
                 );
               }),
 
-              // Botón [+] a la derecha como en el boceto
+              // Botón [+] a la derecha compacto (height: 46)
               GestureDetector(
                 onTap: () => _showBoardSubmenu(),
                 child: Container(
-                  width: 58,
-                  height: 62,
+                  width: 48,
+                  height: 46,
                   decoration: AmodoroTheme.floatingPerspectiveBox(
-                    color: isDark
-                        ? const Color(0xFF1F2421)
-                        : const Color(0xFFF4EFE8),
-                    radius: 18,
-                    thickness: 2.5,
+                    color: neutralCardFill,
+                    radius: 15,
+                    thickness: 2.2,
+                    fullBorderColor: neutralCardOutline,
+                    fullBorderWidth: 1.0,
                   ),
                   child: Center(
-                    child: AmodoroTheme.sysIcon(Symbols.add, size: 24),
+                    child: AmodoroTheme.sysIcon(Symbols.add, size: 21),
                   ),
                 ),
               ),
@@ -851,7 +946,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
           ),
         ),
 
-        // Botón inferior flotante en MAYÚSCULAS para agregar tarjeta a la lista actual
+        // Botón inferior flotante de cada lista: cambia todo el botón de acuerdo al color de esa lista y su texto es blanco
         Padding(
           padding: const EdgeInsets.fromLTRB(18, 6, 20, 14),
           child: GestureDetector(
@@ -859,14 +954,13 @@ class _BoardsScreenState extends State<BoardsScreen> {
             child: Container(
               height: 46,
               decoration: AmodoroTheme.floatingPerspectiveBox(
-                color: isDark
-                    ? AmodoroTheme.coralPillDark
-                    : AmodoroTheme.coralPillLight,
+                color: addButtonColor,
                 radius: 999,
                 thickness: 2.5,
-                perspectiveEdgeColor: isDark
-                    ? AmodoroTheme.coralPillBorderDark
-                    : AmodoroTheme.coralPillBorderLight,
+                perspectiveEdgeColor: AmodoroTheme.darkenForPerspective(
+                  addButtonColor,
+                  0.22,
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -874,19 +968,16 @@ class _BoardsScreenState extends State<BoardsScreen> {
                   AmodoroTheme.sysIcon(
                     Symbols.add,
                     size: 19,
-                    color: isDark
-                        ? AmodoroTheme.coralPillTextDark
-                        : AmodoroTheme.coralPillTextLight,
+                    color: Colors.white,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     'AÑADIR A ${activeBoard.title.toUpperCase()}',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 11.5,
+                      fontWeight: FontWeight.w400,
                       letterSpacing: 1.4,
-                      color: isDark
-                          ? AmodoroTheme.coralPillTextDark
-                          : AmodoroTheme.coralPillTextLight,
+                      color: Colors.white,
                     ),
                   ),
                 ],
@@ -903,16 +994,14 @@ class _BoardsScreenState extends State<BoardsScreen> {
     final surface = isDark
         ? AmodoroTheme.coralPillDark
         : AmodoroTheme.coralPillLight;
-    final ink = isDark
-        ? AmodoroTheme.coralPillTextDark
-        : AmodoroTheme.coralPillTextLight;
+    final ink = AmodoroTheme.coralText(isDark);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: GestureDetector(
         onTap: _openDecideModal,
         child: Container(
-          height: 52,
+          height: 48,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: AmodoroTheme.floatingPerspectiveBox(
             color: surface,
@@ -925,14 +1014,15 @@ class _BoardsScreenState extends State<BoardsScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              AmodoroTheme.sysIcon(Symbols.casino, size: 22, color: ink),
+              AmodoroTheme.sysIcon(Symbols.casino, size: 20, color: ink),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
                   'DECIDIR',
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w400,
                     letterSpacing: 1.6,
                     color: ink,
                   ),
@@ -945,15 +1035,21 @@ class _BoardsScreenState extends State<BoardsScreen> {
     );
   }
 
+  /// Tarjeta de elemento en BOARDS:
+  /// - Superficie en color neutro con borde completo de 1px para no perderse en el fondo.
+  /// - Borde en perspectiva inferior y derecho del color elegido para el elemento.
   Widget _buildBoardItemCard(
     BuildContext context, {
     required BoardModel board,
     required BoardCardItem item,
     required bool isPendientes,
+    required Color neutralCardFill,
+    required Color neutralCardOutline,
+    required bool isDark,
   }) {
-    final bg = AmodoroTheme.parseHexColor(item.bgColor);
-    final ink = AmodoroTheme.getContrastingInk(bg);
-    final muted = AmodoroTheme.getContrastingMutedInk(bg);
+    final chosenEdgeColor = _accentFromHex(item.bgColor);
+    final ink = isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk;
+    final muted = isDark ? AmodoroTheme.darkMuted : AmodoroTheme.lightMuted;
 
     return GestureDetector(
       onLongPress: () => _showItemSubmenu(board: board, existing: item),
@@ -961,9 +1057,12 @@ class _BoardsScreenState extends State<BoardsScreen> {
         width: double.infinity,
         padding: const EdgeInsets.all(15),
         decoration: AmodoroTheme.floatingPerspectiveBox(
-          color: bg,
-          radius: 24,
-          thickness: 2.5,
+          color: neutralCardFill,
+          radius: 22,
+          thickness: 2.8,
+          fullBorderColor: neutralCardOutline,
+          fullBorderWidth: 1.0,
+          perspectiveEdgeColor: chosenEdgeColor,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1021,7 +1120,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                 title: item.linkTitle ?? item.title,
                 thumbnail: item.linkThumbnail,
                 platform: item.linkPlatform,
-                cardBgColor: bg,
+                cardBgColor: neutralCardFill,
               ),
               const SizedBox(height: 10),
             ],
@@ -1091,11 +1190,13 @@ class _BoardsScreenState extends State<BoardsScreen> {
                         vertical: 4,
                       ),
                       decoration: AmodoroTheme.floatingPerspectiveBox(
-                        color: Colors.white.withValues(alpha: 0.55),
+                        color: isDark
+                            ? AmodoroTheme.darkBackground
+                            : AmodoroTheme.lightBackground,
                         radius: 999,
-                        thickness: 1.6,
-                        perspectiveEdgeColor:
-                            AmodoroTheme.darkenForPerspective(bg, 0.25),
+                        thickness: 1.8,
+                        fullBorderColor: neutralCardOutline,
+                        perspectiveEdgeColor: chosenEdgeColor,
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1103,15 +1204,15 @@ class _BoardsScreenState extends State<BoardsScreen> {
                           AmodoroTheme.sysIcon(
                             Symbols.schedule,
                             size: 13,
-                            color: const Color(0xFF1F1B18),
+                            color: ink,
                           ),
                           const SizedBox(width: 4),
-                          const Text(
+                          Text(
                             'PENDIENTES',
                             style: TextStyle(
                               fontSize: 9,
                               letterSpacing: 0.8,
-                              color: Color(0xFF1F1B18),
+                              color: ink,
                             ),
                           ),
                         ],

@@ -32,6 +32,7 @@ class UserProfile {
   final String themeMode;
   final String accentPalette;
   final List<String> quickReplies;
+  final List<String> reactionEmojis;
 
   const UserProfile({
     required this.id,
@@ -44,10 +45,12 @@ class UserProfile {
     required this.themeMode,
     required this.accentPalette,
     required this.quickReplies,
+    required this.reactionEmojis,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     final rawReplies = json['quickReplies'];
+    final rawEmojis = json['reactionEmojis'];
     final uname = (json['username'] ?? '').toString();
     final dname = (json['displayName'] ?? '').toString().trim();
     final nickByPartner = (json['nicknameByPartner'] ?? '').toString().trim();
@@ -61,11 +64,14 @@ class UserProfile {
           ? nickByPartner
           : (dname.isNotEmpty ? dname : uname),
       partnerNicknameGiven: (json['partnerNicknameGiven'] ?? '').toString(),
-      themeMode: (json['themeMode'] ?? 'light').toString(),
+      themeMode: (json['themeMode'] ?? 'system').toString(),
       accentPalette: (json['accentPalette'] ?? 'fig-sage').toString(),
       quickReplies: rawReplies is List
           ? rawReplies.map((e) => e.toString()).toList()
           : const ['Te amo', 'Me alegraste el día', 'Qué bonito'],
+      reactionEmojis: rawEmojis is List && rawEmojis.isNotEmpty
+          ? rawEmojis.map((e) => e.toString()).toList()
+          : const ['❤️', '🥰', '🥺', '✨', '🔥', '🫶'],
     );
   }
 }
@@ -427,6 +433,7 @@ class SyncPayload {
   final List<HomeCardItem> receivedHistory;
   final List<HomeCardItem> sentHistory;
   final List<String> quickReplies;
+  final List<String> reactionEmojis;
   final List<BoardModel> boards;
   final String actividadesBoardId;
   final ActiveVotingState? activeVoting;
@@ -439,6 +446,7 @@ class SyncPayload {
     required this.receivedHistory,
     required this.sentHistory,
     required this.quickReplies,
+    required this.reactionEmojis,
     required this.boards,
     required this.actividadesBoardId,
     this.activeVoting,
@@ -454,6 +462,7 @@ class SyncPayload {
     final rawReceived = homeMap['receivedHistory'];
     final rawSent = homeMap['sentHistory'];
     final rawReplies = homeMap['quickReplies'];
+    final rawEmojis = homeMap['reactionEmojis'] ?? meMap['reactionEmojis'];
     final latestCardMap = homeMap['latestPartnerCard'];
     final activeVotingMap = decisionMap['activeVoting'];
     final latestResolvedMap = decisionMap['latestResolved'];
@@ -480,6 +489,9 @@ class SyncPayload {
       quickReplies: rawReplies is List
           ? rawReplies.map((e) => e.toString()).toList()
           : const ['Te amo', 'Me alegraste el día', 'Qué bonito'],
+      reactionEmojis: rawEmojis is List && rawEmojis.isNotEmpty
+          ? rawEmojis.map((e) => e.toString()).toList()
+          : const ['❤️', '🥰', '🥺', '✨', '🔥', '🫶'],
       boards: rawBoards is List
           ? rawBoards
               .whereType<Map<String, dynamic>>()

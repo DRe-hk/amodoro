@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../services/api_client.dart';
@@ -26,6 +25,9 @@ class _LoginScreenState extends State<LoginScreen> {
   late int _step; // 0: Login/Bienvenida, 1: Registro (Avatar y Nombre), 2: Código de Emparejamiento
   bool _loading = false;
   String? _error;
+
+  bool _showLoginPassword = false;
+  bool _showRegisterPassword = false;
 
   // Login controllers
   final TextEditingController _loginUserCtrl = TextEditingController();
@@ -176,91 +178,82 @@ class _LoginScreenState extends State<LoginScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final coralBg =
         isDark ? AmodoroTheme.coralPillDark : AmodoroTheme.coralPillLight;
-    final coralInk = isDark
-        ? AmodoroTheme.coralPillTextDark
-        : AmodoroTheme.coralPillTextLight;
-    final cardSurface = isDark
-        ? const Color(0xFF1F2421).withValues(alpha: 0.72)
-        : const Color(0xFFF4EFE8).withValues(alpha: 0.76);
+    final coralInk = AmodoroTheme.coralText(isDark);
+    final secondaryBtnBg = isDark
+        ? AmodoroTheme.darkContainer
+        : AmodoroTheme.lightContainer;
 
     return Scaffold(
       body: GlassBubbleBackground(
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (_step == 0) ...[
-                    // Pantalla de Bienvenida / Login con Logo grande en Playwrite NL Coral + Mensaje
+                    // Pantalla de Login: solo el logo grande en Playwrite NL Coral arriba, sin descripción debajo y sin Card contenedora detrás de los elementos.
                     Center(
                       child: Text(
                         'amodoro',
                         style: AmodoroTheme.logoStyle(
-                          fontSize: 46,
+                          fontSize: 48,
                           isDark: isDark,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Un espacio íntimo para compartir días, ideas y decisiones entre dos.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 15,
-                        height: 1.4,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    const SizedBox(height: 36),
+                    if (_error != null) _buildErrorBanner(_error!),
+                    _buildPerspectiveField(
+                      controller: _loginUserCtrl,
+                      hint: 'Nombre o usuario',
+                      icon: Symbols.person,
+                      isDark: isDark,
+                    ),
+                    const SizedBox(height: 14),
+                    _buildPerspectiveField(
+                      controller: _loginPassCtrl,
+                      hint: 'Contraseña',
+                      icon: Symbols.lock,
+                      obscure: !_showLoginPassword,
+                      isDark: isDark,
+                      suffixIcon: IconButton(
+                        onPressed: () {
+                          setState(() {
+                            _showLoginPassword = !_showLoginPassword;
+                          });
+                        },
+                        icon: AmodoroTheme.sysIcon(
+                          _showLoginPassword
+                              ? Symbols.visibility_off
+                              : Symbols.visibility,
+                          size: 20,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 28),
-                    _buildGlassPanel(
-                      cardSurface: cardSurface,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (_error != null) _buildErrorBanner(_error!),
-                          _buildPerspectiveField(
-                            controller: _loginUserCtrl,
-                            hint: 'Nombre o usuario',
-                            icon: Symbols.person,
-                            isDark: isDark,
-                          ),
-                          const SizedBox(height: 14),
-                          _buildPerspectiveField(
-                            controller: _loginPassCtrl,
-                            hint: 'Contraseña',
-                            icon: Symbols.lock,
-                            obscure: true,
-                            isDark: isDark,
-                          ),
-                          const SizedBox(height: 20),
-                          _buildPerspectiveButton(
-                            label: _loading ? 'ENTRANDO...' : 'INICIAR SESIÓN',
-                            bgColor: coralBg,
-                            inkColor: coralInk,
-                            onTap: _loading ? null : _submitLogin,
-                          ),
-                          const SizedBox(height: 12),
-                          _buildPerspectiveButton(
-                            label: 'CREAR CUENTA',
-                            bgColor: isDark
-                                ? const Color(0xFF282F2B)
-                                : const Color(0xFFFCF9F5),
-                            inkColor: Theme.of(context).colorScheme.onSurface,
-                            onTap: () {
-                              setState(() {
-                                _error = null;
-                                _step = 1;
-                              });
-                            },
-                          ),
-                        ],
-                      ),
+                    const SizedBox(height: 22),
+                    _buildPerspectiveButton(
+                      label: _loading ? 'ENTRANDO...' : 'INICIAR SESIÓN',
+                      bgColor: coralBg,
+                      inkColor: coralInk,
+                      onTap: _loading ? null : _submitLogin,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildPerspectiveButton(
+                      label: 'CREAR CUENTA',
+                      bgColor: secondaryBtnBg,
+                      inkColor: Theme.of(context).colorScheme.onSurface,
+                      onTap: () {
+                        setState(() {
+                          _error = null;
+                          _step = 1;
+                        });
+                      },
                     ),
                   ] else if (_step == 1) ...[
-                    // Paso 1 de Registro: Solo el logo más pequeño en la parte superior (sin mensaje de bienvenida)
+                    // Paso 1 de Registro: Solo el logo más pequeño en la parte superior, sin mensaje ni Card contenedora detrás.
                     Center(
                       child: Text(
                         'amodoro',
@@ -270,179 +263,139 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
-                    _buildGlassPanel(
-                      cardSurface: cardSurface,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (_error != null) _buildErrorBanner(_error!),
-                          Center(
-                            child: FlatAvatarBadge(
-                              avatarId: _selectedAvatarId,
-                              size: 86,
-                              showPerspectiveBorder: true,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          FlatAvatarSelector(
-                            selectedAvatarId: _selectedAvatarId,
-                            onSelect: _onSelectRegisterAvatar,
-                          ),
-                          const SizedBox(height: 20),
-                          _buildPerspectiveField(
-                            controller: _registerNameCtrl,
-                            hint: 'Tu nombre',
-                            icon: Symbols.badge,
-                            isDark: isDark,
-                          ),
-                          const SizedBox(height: 12),
-                          _buildPerspectiveField(
-                            controller: _registerPassCtrl,
-                            hint: 'Contraseña (opcional)',
-                            icon: Symbols.key,
-                            obscure: true,
-                            isDark: isDark,
-                          ),
-                          const SizedBox(height: 20),
-                          _buildPerspectiveButton(
-                            label: _loading ? 'GUARDANDO...' : 'CONTINUAR',
-                            bgColor: coralBg,
-                            inkColor: coralInk,
-                            onTap: _loading ? null : _submitRegister,
-                          ),
-                          const SizedBox(height: 12),
-                          _buildPerspectiveButton(
-                            label: 'VOLVER',
-                            bgColor: isDark
-                                ? const Color(0xFF282F2B)
-                                : const Color(0xFFFCF9F5),
-                            inkColor: Theme.of(context).colorScheme.onSurface,
-                            onTap: () {
-                              setState(() {
-                                _error = null;
-                                _step = 0;
-                              });
-                            },
-                          ),
-                        ],
+                    const SizedBox(height: 28),
+                    if (_error != null) _buildErrorBanner(_error!),
+                    Center(
+                      child: FlatAvatarBadge(
+                        avatarId: _selectedAvatarId,
+                        size: 88,
+                        showPerspectiveBorder: true,
                       ),
                     ),
+                    const SizedBox(height: 18),
+                    FlatAvatarSelector(
+                      selectedAvatarId: _selectedAvatarId,
+                      onSelect: _onSelectRegisterAvatar,
+                    ),
+                    const SizedBox(height: 22),
+                    _buildPerspectiveField(
+                      controller: _registerNameCtrl,
+                      hint: 'Tu nombre',
+                      icon: Symbols.badge,
+                      isDark: isDark,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildPerspectiveField(
+                      controller: _registerPassCtrl,
+                      hint: 'Contraseña (opcional)',
+                      icon: Symbols.key,
+                      obscure: !_showRegisterPassword,
+                      isDark: isDark,
+                      suffixIcon: IconButton(
+                        onPressed: () {
+                          setState(() {
+                            _showRegisterPassword = !_showRegisterPassword;
+                          });
+                        },
+                        icon: AmodoroTheme.sysIcon(
+                          _showRegisterPassword
+                              ? Symbols.visibility_off
+                              : Symbols.visibility,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    _buildPerspectiveButton(
+                      label: _loading ? 'GUARDANDO...' : 'CONTINUAR',
+                      bgColor: coralBg,
+                      inkColor: coralInk,
+                      onTap: _loading ? null : _submitRegister,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildPerspectiveButton(
+                      label: 'VOLVER',
+                      bgColor: secondaryBtnBg,
+                      inkColor: Theme.of(context).colorScheme.onSurface,
+                      onTap: () {
+                        setState(() {
+                          _error = null;
+                          _step = 0;
+                        });
+                      },
+                    ),
                   ] else ...[
-                    // Paso 2: Pantalla de Bienvenida con Código de Emparejamiento
+                    // Paso 2: Pantalla de Código de Emparejamiento (sin Card detrás)
                     Center(
                       child: Text(
                         'amodoro',
                         style: AmodoroTheme.logoStyle(
-                          fontSize: 38,
+                          fontSize: 36,
                           isDark: isDark,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Conecta con tu pareja usando su código de invitación o comparte el tuyo.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14.5,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                    const SizedBox(height: 28),
+                    if (_error != null) _buildErrorBanner(_error!),
+                    _buildPerspectiveField(
+                      controller: _pairCodeCtrl,
+                      hint: 'CÓDIGO DE PAREJA (EJ. K7M2-9QXP)',
+                      icon: Symbols.link,
+                      isDark: isDark,
+                      uppercase: true,
                     ),
-                    const SizedBox(height: 22),
-                    _buildGlassPanel(
-                      cardSurface: cardSurface,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (_error != null) _buildErrorBanner(_error!),
-                          _buildPerspectiveField(
-                            controller: _pairCodeCtrl,
-                            hint: 'CÓDIGO DE PAREJA (EJ. K7M2-9QXP)',
-                            icon: Symbols.link,
-                            isDark: isDark,
-                            uppercase: true,
-                          ),
-                          const SizedBox(height: 16),
-                          _buildPerspectiveButton(
-                            label: _loading
-                                ? 'VINCULANDO...'
-                                : 'VINCULAR CON CÓDIGO',
-                            bgColor: coralBg,
-                            inkColor: coralInk,
-                            onTap: _loading ? null : _submitPairCode,
-                          ),
-                          const SizedBox(height: 14),
-                          _buildPerspectiveButton(
-                            label: 'GENERAR MI CÓDIGO DE INVITACIÓN',
-                            bgColor: isDark
-                                ? const Color(0xFF282F2B)
-                                : const Color(0xFFFCF9F5),
-                            inkColor: Theme.of(context).colorScheme.onSurface,
-                            onTap: _generateMyPairCode,
-                          ),
-                          if (_myInviteCode != null) ...[
-                            const SizedBox(height: 14),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 14,
-                              ),
-                              decoration:
-                                  AmodoroTheme.floatingPerspectiveBox(
-                                color: const Color(0xFFFFDAD6),
-                                radius: 18,
-                                thickness: 2.5,
-                              ),
-                              child: Center(
-                                child: SelectableText(
-                                  _myInviteCode!,
-                                  style: const TextStyle(
-                                    fontSize: 22,
-                                    letterSpacing: 2.5,
-                                    color: Color(0xFF1F1B18),
-                                  ),
-                                ),
-                              ),
+                    const SizedBox(height: 16),
+                    _buildPerspectiveButton(
+                      label: _loading
+                          ? 'VINCULANDO...'
+                          : 'VINCULAR CON CÓDIGO',
+                      bgColor: coralBg,
+                      inkColor: coralInk,
+                      onTap: _loading ? null : _submitPairCode,
+                    ),
+                    const SizedBox(height: 14),
+                    _buildPerspectiveButton(
+                      label: 'GENERAR MI CÓDIGO DE INVITACIÓN',
+                      bgColor: secondaryBtnBg,
+                      inkColor: Theme.of(context).colorScheme.onSurface,
+                      onTap: _generateMyPairCode,
+                    ),
+                    if (_myInviteCode != null) ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        decoration: AmodoroTheme.floatingPerspectiveBox(
+                          color: const Color(0xFFFFDAD6),
+                          radius: 18,
+                          thickness: 2.5,
+                        ),
+                        child: Center(
+                          child: SelectableText(
+                            _myInviteCode!,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              letterSpacing: 2.5,
+                              color: Color(0xFF1F1B18),
                             ),
-                          ],
-                          const SizedBox(height: 14),
-                          _buildPerspectiveButton(
-                            label: 'CONTINUAR A HOME',
-                            bgColor: isDark
-                                ? const Color(0xFF1F2421)
-                                : const Color(0xFFE6E1D6),
-                            inkColor: Theme.of(context).colorScheme.onSurface,
-                            onTap: widget.onLoggedIn,
                           ),
-                        ],
+                        ),
                       ),
+                    ],
+                    const SizedBox(height: 14),
+                    _buildPerspectiveButton(
+                      label: 'CONTINUAR A HOME',
+                      bgColor: secondaryBtnBg,
+                      inkColor: Theme.of(context).colorScheme.onSurface,
+                      onTap: widget.onLoggedIn,
                     ),
                   ],
                 ],
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGlassPanel({
-    required Color cardSurface,
-    required Widget child,
-  }) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(28),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          padding: const EdgeInsets.all(22),
-          decoration: AmodoroTheme.floatingPerspectiveBox(
-            color: cardSurface,
-            radius: 28,
-            thickness: 2.5,
-          ),
-          child: child,
         ),
       ),
     );
@@ -455,8 +408,11 @@ class _LoginScreenState extends State<LoginScreen> {
     required bool isDark,
     bool obscure = false,
     bool uppercase = false,
+    Widget? suffixIcon,
   }) {
-    final bg = isDark ? const Color(0xFF151816) : const Color(0xFFFCF9F5);
+    final bg = isDark
+        ? AmodoroTheme.darkContainer
+        : AmodoroTheme.lightContainer;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
       decoration: AmodoroTheme.floatingPerspectiveBox(
@@ -474,6 +430,7 @@ class _LoginScreenState extends State<LoginScreen> {
           border: InputBorder.none,
           hintText: hint,
           icon: AmodoroTheme.sysIcon(icon, size: 20),
+          suffixIcon: suffixIcon,
         ),
       ),
     );
@@ -499,6 +456,7 @@ class _LoginScreenState extends State<LoginScreen> {
             label.toUpperCase(),
             style: TextStyle(
               fontSize: 12.5,
+              fontWeight: FontWeight.w400,
               letterSpacing: 1.5,
               color: inkColor,
             ),

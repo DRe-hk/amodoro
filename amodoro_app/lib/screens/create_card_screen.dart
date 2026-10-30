@@ -265,6 +265,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     if (text.isEmpty &&
         finalMediaDataUrl == null &&
         (linkUrl == null || linkUrl.isEmpty)) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Escribe aquí tu mensaje o añade una opción arriba.'),
@@ -443,16 +444,33 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   }
 
   Widget _buildTopMediaSection(Color cardColor, Color cardInk) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final canvasOuterColor = isDark
+        ? AmodoroTheme.darkBackground
+        : AmodoroTheme.lightBackground;
+    final canvasTileColor = isDark
+        ? AmodoroTheme.darkContainer
+        : AmodoroTheme.lightContainer;
+    final canvasInk = isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk;
+    final canvasEdge = AmodoroTheme.darkenForPerspective(
+      canvasTileColor,
+      isDark ? 0.14 : 0.18,
+    );
+
     if (_loadingLink) {
       return Container(
         height: 180,
         decoration: AmodoroTheme.floatingPerspectiveBox(
-          color: Colors.white.withValues(alpha: 0.55),
+          color: canvasOuterColor,
           radius: 24,
           thickness: 2.5,
+          perspectiveEdgeColor: canvasEdge,
         ),
-        child: const Center(
-          child: Text('CARGANDO VISTA PREVIA DEL LINK...'),
+        child: Center(
+          child: Text(
+            'CARGANDO VISTA PREVIA DEL LINK...',
+            style: TextStyle(color: canvasInk),
+          ),
         ),
       );
     }
@@ -481,26 +499,35 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     }
 
     if (_mediaMode == 'drawing') {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'LIENZO DE DIBUJO',
-                style: TextStyle(
-                  fontSize: 11,
-                  letterSpacing: 1.2,
-                  color: cardInk,
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: AmodoroTheme.floatingPerspectiveBox(
+          color: canvasOuterColor,
+          radius: 24,
+          thickness: 2.5,
+          perspectiveEdgeColor: canvasEdge,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'LIENZO DE DIBUJO',
+                  style: TextStyle(
+                    fontSize: 11,
+                    letterSpacing: 1.2,
+                    color: canvasInk,
+                  ),
                 ),
-              ),
-              _buildCancelMediaChip(),
-            ],
-          ),
-          const SizedBox(height: 8),
-          InteractiveDrawingPad(controller: _drawingController),
-        ],
+                _buildCancelMediaChip(),
+              ],
+            ),
+            const SizedBox(height: 8),
+            InteractiveDrawingPad(controller: _drawingController),
+          ],
+        ),
       );
     }
 
@@ -510,22 +537,19 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
         title: _linkPreview!.title,
         thumbnail: _linkPreview!.thumbnail,
         platform: _linkPreview!.platform,
-        cardBgColor: cardColor,
+        cardBgColor: canvasOuterColor,
         onRemove: _cancelMediaSelection,
       );
     }
 
-    // Por defecto: Cuadrícula 2x2 de las 4 opciones del boceto (CAPTURAR, IMAGEN, DIBUJO, LINK)
-    final optionTileColor = Colors.white.withValues(alpha: 0.52);
-    final edgeColor = AmodoroTheme.darkenForPerspective(cardColor, 0.24);
-
+    // Por defecto: Cuadrícula 2x2 con colores basados en el fondo de la app (no en el color de la tarjeta)
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: AmodoroTheme.floatingPerspectiveBox(
-        color: Colors.white.withValues(alpha: 0.28),
+        color: canvasOuterColor,
         radius: 26,
         thickness: 2.5,
-        perspectiveEdgeColor: edgeColor,
+        perspectiveEdgeColor: canvasEdge,
       ),
       child: Column(
         children: [
@@ -535,9 +559,9 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                 child: _buildQuadOptionTile(
                   icon: Symbols.photo_camera,
                   label: 'CAPTURAR',
-                  tileColor: optionTileColor,
-                  edgeColor: edgeColor,
-                  inkColor: cardInk,
+                  tileColor: canvasTileColor,
+                  edgeColor: canvasEdge,
+                  inkColor: canvasInk,
                   onTap: () => _pickCameraOrGallery(ImageSource.camera),
                 ),
               ),
@@ -546,9 +570,9 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                 child: _buildQuadOptionTile(
                   icon: Symbols.image,
                   label: 'IMAGEN',
-                  tileColor: optionTileColor,
-                  edgeColor: edgeColor,
-                  inkColor: cardInk,
+                  tileColor: canvasTileColor,
+                  edgeColor: canvasEdge,
+                  inkColor: canvasInk,
                   onTap: () => _pickCameraOrGallery(ImageSource.gallery),
                 ),
               ),
@@ -561,9 +585,9 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                 child: _buildQuadOptionTile(
                   icon: Symbols.edit,
                   label: 'DIBUJO',
-                  tileColor: optionTileColor,
-                  edgeColor: edgeColor,
-                  inkColor: cardInk,
+                  tileColor: canvasTileColor,
+                  edgeColor: canvasEdge,
+                  inkColor: canvasInk,
                   onTap: _openDrawingMode,
                 ),
               ),
@@ -572,9 +596,9 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                 child: _buildQuadOptionTile(
                   icon: Symbols.north_east,
                   label: 'LINK',
-                  tileColor: optionTileColor,
-                  edgeColor: edgeColor,
-                  inkColor: cardInk,
+                  tileColor: canvasTileColor,
+                  edgeColor: canvasEdge,
+                  inkColor: canvasInk,
                   onTap: _openLinkDialog,
                 ),
               ),

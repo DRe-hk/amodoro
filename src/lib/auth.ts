@@ -43,323 +43,44 @@ let seededChecked = false;
 
 export function ensureInitialSeed() {
   if (seededChecked) return;
-  const existingUsers = db.select().from(users).all();
   const now = new Date();
-  const yesterday = new Date(now.getTime() - 86_400_000);
-  const twoDaysAgo = new Date(now.getTime() - 2 * 86_400_000);
+  const existingUsers = db.select().from(users).all();
+  const allBoards = db.select().from(boards).all();
 
-  if (existingUsers.length === 0) {
-    const defaultHash =
-      "$argon2id$v=19$m=19456,t=2,p=1$amodoroSalt123456$5T6K4R8vN3mP9qL2wX7zB1cV4nM8kH5jG2fD9sA3eW0";
-
-    const userA = db
-      .insert(users)
-      .values({
-        username: "drehk",
-        passwordHash: defaultHash,
-        displayName: "Drehk",
-        avatarId: "cat",
-        nicknameByPartner: "Rey",
-        themeMode: "light",
-        accentPalette: "fig-sage",
-        createdAt: twoDaysAgo,
-      })
-      .returning()
-      .get();
-
-    const userB = db
-      .insert(users)
-      .values({
-        username: "pareja",
-        passwordHash: defaultHash,
-        displayName: "Alina",
-        avatarId: "rabbit",
-        partnerId: userA.id,
-        nicknameByPartner: "Cielo",
-        themeMode: "light",
-        accentPalette: "fig-sage",
-        createdAt: twoDaysAgo,
-      })
-      .returning()
-      .get();
-
-    db.update(users)
-      .set({ partnerId: userB.id })
-      .where(eq(users.id, userA.id))
+  const act = allBoards.find((b) => b.slug === "actividades");
+  if (act && act.title !== "PENDIENTES") {
+    db.update(boards)
+      .set({ title: "PENDIENTES", icon: "schedule" })
+      .where(eq(boards.id, act.id))
       .run();
-
-    // Seed the predefined system boards matching the sketch:
-    // PENDIENTES (slug: actividades), MÚSICA, PELIS, SERIES, JUEGOS
-    const actBoard = db
-      .insert(boards)
-      .values({
-        slug: "actividades",
-        title: "PENDIENTES",
-        icon: "schedule",
-        bgColor: "#F4EFE8",
-        isSystem: true,
-        createdBy: userA.id,
-        createdAt: twoDaysAgo,
-      })
-      .returning()
-      .get();
-
-    const musicBoard = db
-      .insert(boards)
-      .values({
-        slug: "musica",
-        title: "MÚSICA",
-        icon: "album",
-        bgColor: "#E8DEF8",
-        isSystem: true,
-        createdBy: userA.id,
-        createdAt: twoDaysAgo,
-      })
-      .returning()
-      .get();
-
-    const moviesBoard = db
-      .insert(boards)
-      .values({
-        slug: "pelis",
-        title: "PELIS",
-        icon: "movie",
-        bgColor: "#FFDAD6",
-        isSystem: true,
-        createdBy: userA.id,
-        createdAt: twoDaysAgo,
-      })
-      .returning()
-      .get();
-
-    const seriesBoard = db
-      .insert(boards)
-      .values({
-        slug: "series",
-        title: "SERIES",
-        icon: "tv",
-        bgColor: "#D3E4FF",
-        isSystem: true,
-        createdBy: userA.id,
-        createdAt: twoDaysAgo,
-      })
-      .returning()
-      .get();
-
-    const gamesBoard = db
-      .insert(boards)
-      .values({
-        slug: "juegos",
-        title: "JUEGOS",
-        icon: "sports_esports",
-        bgColor: "#C8E6C9",
-        isSystem: true,
-        createdBy: userA.id,
-        createdAt: twoDaysAgo,
-      })
-      .returning()
-      .get();
-
-    // Seed initial items matching the sketch ("VER SNOOPY", "JUGAR MINECRAFT", "JUGAR POKEMON", "VER WANDAVISION")
-    db.insert(boardItems)
-      .values([
-        {
-          boardId: actBoard.id,
-          categoryTag: "PELÍCULAS",
-          title: "VER SNOOPY",
-          notes: "Con mantita y palomitas esta noche",
-          bgColor: "#FFDAD6",
-          addedBy: userB.id,
-          createdAt: twoDaysAgo,
-        },
-        {
-          boardId: actBoard.id,
-          categoryTag: "JUEGO",
-          title: "JUGAR MINECRAFT",
-          notes: "Terminar nuestra cabaña junto al lago",
-          bgColor: "#C8E6C9",
-          addedBy: userA.id,
-          createdAt: twoDaysAgo,
-        },
-        {
-          boardId: actBoard.id,
-          categoryTag: "JUEGO",
-          title: "JUGAR POKÉMON",
-          notes: "Combate amistoso o ruta cooperativa",
-          bgColor: "#F5E0B5",
-          addedBy: userA.id,
-          createdAt: yesterday,
-        },
-        {
-          boardId: actBoard.id,
-          categoryTag: "SERIE",
-          title: "VER WANDAVISION",
-          notes: "Dos episodios seguidos juntos",
-          bgColor: "#E8DEF8",
-          addedBy: userB.id,
-          createdAt: yesterday,
-        },
-        {
-          boardId: musicBoard.id,
-          categoryTag: "MÚSICA",
-          title: "Lover, You Should've Come Over",
-          notes: "Escúchala antes de dormir",
-          url: "https://open.spotify.com/track/6Jv7kjGkhY2fT4yuBF3aTz",
-          linkTitle: "Lover, You Should've Come Over — Jeff Buckley",
-          linkPlatform: "Spotify",
-          bgColor: "#E8DEF8",
-          addedBy: userB.id,
-          createdAt: yesterday,
-        },
-        {
-          boardId: moviesBoard.id,
-          categoryTag: "PELÍCULAS",
-          title: "Before Sunrise",
-          notes: "Clásico pendiente para el finde",
-          bgColor: "#FFDAD6",
-          addedBy: userB.id,
-          createdAt: yesterday,
-        },
-        {
-          boardId: seriesBoard.id,
-          categoryTag: "SERIE",
-          title: "The Bear",
-          notes: "Empezar primera temporada",
-          bgColor: "#D3E4FF",
-          addedBy: userA.id,
-          createdAt: now,
-        },
-        {
-          boardId: gamesBoard.id,
-          categoryTag: "JUEGO",
-          title: "It Takes Two",
-          notes: "Cooperativo en pareja",
-          bgColor: "#C8E6C9",
-          addedBy: userA.id,
-          createdAt: now,
-        },
-      ])
-      .run();
-
-    // Seed sample Home daily cards
-    const cardYesterday = db
-      .insert(homeCards)
-      .values({
-        authorId: userB.id,
-        mediaType: "none",
-        body: "Estuve pensando en nuestra próxima cita y en las ganas que tengo de abrazarte fuerte. Que tengas un domingo precioso",
-        bgColor: "#C8E6C9",
-        fontFamily: "serif",
-        fontSize: "md",
-        fontSizePx: 18,
-        createdAt: yesterday,
-      })
-      .returning()
-      .get();
-
-    db.insert(homeCardReactions)
-      .values({
-        cardId: cardYesterday.id,
-        userId: userA.id,
-        emoji: "❤️",
-        presetText: "Me alegraste el día",
-        createdAt: yesterday,
-      })
-      .run();
-
-    db.insert(homeCards)
-      .values({
-        authorId: userB.id,
-        mediaType: "none",
-        body: "Buenos días mi vida. Hoy va a ser un gran día, acuérdate de tomar un respiro y que aquí te espero esta noche para decidir qué hacemos juntos",
-        bgColor: "#FFDAD6",
-        fontFamily: "sans",
-        fontSize: "lg",
-        fontSizePx: 22,
-        createdAt: now,
-      })
-      .run();
-
-    const sentByA = db
-      .insert(homeCards)
-      .values({
-        authorId: userA.id,
-        mediaType: "none",
-        body: "Te dejé anotadas un par de ideas nuevas en el tablero de pendientes para esta noche",
-        bgColor: "#F5E0B5",
-        fontFamily: "hand",
-        fontSize: "lg",
-        fontSizePx: 22,
-        createdAt: yesterday,
-      })
-      .returning()
-      .get();
-
-    db.insert(homeCardReactions)
-      .values({
-        cardId: sentByA.id,
-        userId: userB.id,
-        emoji: "🥰",
-        presetText: "Te amo",
-        createdAt: yesterday,
-      })
-      .run();
-  } else {
-    // Ensure existing DB has the 5 predefined boards and paired seed users
-    const user1 = existingUsers.find((u) => u.id === 1);
-    const user2 = existingUsers.find((u) => u.id === 2);
-    if (user1 && user2 && (!user1.partnerId || !user2.partnerId)) {
-      db.update(users)
-        .set({
-          partnerId: user2.id,
-          displayName: user1.displayName || "Drehk",
-          avatarId: user1.avatarId || "cat",
-        })
-        .where(eq(users.id, user1.id))
-        .run();
-      db.update(users)
-        .set({
-          partnerId: user1.id,
-          displayName: user2.displayName || "Alina",
-          avatarId: user2.avatarId || "rabbit",
-        })
-        .where(eq(users.id, user2.id))
-        .run();
-    }
-
-    const allBoards = db.select().from(boards).all();
-    const act = allBoards.find((b) => b.slug === "actividades");
-    if (act && act.title !== "PENDIENTES") {
-      db.update(boards)
-        .set({ title: "PENDIENTES", icon: "schedule" })
-        .where(eq(boards.id, act.id))
-        .run();
-    }
-    const ensureBoard = (
-      slug: string,
-      title: string,
-      icon: string,
-      bgColor: string,
-    ) => {
-      if (!allBoards.some((b) => b.slug === slug)) {
-        db.insert(boards)
-          .values({
-            slug,
-            title,
-            icon,
-            bgColor,
-            isSystem: true,
-            createdBy: existingUsers[0]?.id ?? null,
-            createdAt: now,
-          })
-          .run();
-      }
-    };
-    ensureBoard("musica", "MÚSICA", "album", "#E8DEF8");
-    ensureBoard("pelis", "PELIS", "movie", "#FFDAD6");
-    ensureBoard("series", "SERIES", "tv", "#D3E4FF");
-    ensureBoard("juegos", "JUEGOS", "sports_esports", "#C8E6C9");
   }
+
+  const ensureBoard = (
+    slug: string,
+    title: string,
+    icon: string,
+    bgColor: string,
+  ) => {
+    if (!allBoards.some((b) => b.slug === slug)) {
+      db.insert(boards)
+        .values({
+          slug,
+          title,
+          icon,
+          bgColor,
+          isSystem: true,
+          createdBy: existingUsers[0]?.id ?? null,
+          createdAt: now,
+        })
+        .run();
+    }
+  };
+
+  ensureBoard("actividades", "PENDIENTES", "schedule", "#F08076");
+  ensureBoard("musica", "MÚSICA", "album", "#E8DEF8");
+  ensureBoard("pelis", "PELIS", "movie", "#FFDAD6");
+  ensureBoard("series", "SERIES", "tv", "#D3E4FF");
+  ensureBoard("juegos", "JUEGOS", "sports_esports", "#C8E6C9");
 
   seededChecked = true;
 }
@@ -491,10 +212,6 @@ export function getPartnerUser(myUserId: number) {
     const linked = all.find((u) => u.id === me.partnerId);
     if (linked) return linked;
   }
-  // Fallback for initial 2-user seed
-  if (myUserId === 1 || myUserId === 2) {
-    return all.find((u) => u.id !== myUserId && (u.id === 1 || u.id === 2)) ?? null;
-  }
   return null;
 }
 
@@ -535,7 +252,7 @@ export async function registerNewUser(input: {
       avatarId: input.avatarId || "cat",
       partnerId: null,
       nicknameByPartner: "",
-      themeMode: "light",
+      themeMode: "system",
       accentPalette: "fig-sage",
       createdAt: new Date(),
     })
@@ -651,6 +368,7 @@ export function updateUserSettings(input: {
   themeMode?: ThemeMode;
   accentPalette?: AccentPalette;
   quickReplies?: string[];
+  reactionEmojis?: string[];
 }) {
   const partner = getPartnerUser(input.userId);
   if (partner && typeof input.partnerNickname === "string") {
@@ -681,6 +399,15 @@ export function updateUserSettings(input: {
       .filter((s) => s.length > 0 && s.length <= 80)
       .slice(0, 20);
     updates.quickRepliesJson = JSON.stringify(filtered);
+  }
+  if (input.reactionEmojis) {
+    const filteredEmojis = input.reactionEmojis
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0 && s.length <= 16)
+      .slice(0, 20);
+    if (filteredEmojis.length > 0) {
+      updates.reactionEmojisJson = JSON.stringify(filteredEmojis);
+    }
   }
 
   if (Object.keys(updates).length > 0) {

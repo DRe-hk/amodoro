@@ -21,6 +21,7 @@ export async function POST(request: Request) {
       themeMode?: ThemeMode;
       accentPalette?: AccentPalette;
       quickReplies?: string[];
+      reactionEmojis?: string[];
     };
 
     if (payload.action === "update_settings") {
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
         themeMode: payload.themeMode,
         accentPalette: payload.accentPalette,
         quickReplies: payload.quickReplies,
+        reactionEmojis: payload.reactionEmojis,
       });
       return jsonResponse({ ok: true });
     }

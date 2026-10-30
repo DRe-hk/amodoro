@@ -445,6 +445,7 @@ class AmodoroApiClient {
     required String themeMode,
     required String accentPalette,
     required List<String> quickReplies,
+    List<String>? reactionEmojis,
   }) async {
     final res = await http
         .post(
@@ -458,6 +459,7 @@ class AmodoroApiClient {
             'themeMode': themeMode,
             'accentPalette': accentPalette,
             'quickReplies': quickReplies,
+            if (reactionEmojis != null) 'reactionEmojis': reactionEmojis,
           }),
         )
         .timeout(const Duration(seconds: 15));

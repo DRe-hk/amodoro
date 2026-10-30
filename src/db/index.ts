@@ -34,9 +34,10 @@ function bootstrapSchema(sqlite: Database.Database) {
       avatar_id TEXT NOT NULL DEFAULT 'cat',
       partner_id INTEGER,
       nickname_by_partner TEXT NOT NULL DEFAULT '',
-      theme_mode TEXT NOT NULL DEFAULT 'light',
+      theme_mode TEXT NOT NULL DEFAULT 'system',
       accent_palette TEXT NOT NULL DEFAULT 'fig-sage',
       quick_replies_json TEXT NOT NULL DEFAULT '["Te amo","Me alegraste el día","Qué bonito","Te extraño mucho","Me sacaste una sonrisa"]',
+      reaction_emojis_json TEXT NOT NULL DEFAULT '["❤️","🥰","🥺","✨","🔥","🫶"]',
       created_at INTEGER NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS users_username_idx ON users(username);
@@ -162,6 +163,11 @@ function bootstrapSchema(sqlite: Database.Database) {
   safeAddColumn(sqlite, "users", "display_name TEXT NOT NULL DEFAULT ''");
   safeAddColumn(sqlite, "users", "avatar_id TEXT NOT NULL DEFAULT 'cat'");
   safeAddColumn(sqlite, "users", "partner_id INTEGER");
+  safeAddColumn(
+    sqlite,
+    "users",
+    `reaction_emojis_json TEXT NOT NULL DEFAULT '["❤️","🥰","🥺","✨","🔥","🫶"]'`,
+  );
   safeAddColumn(
     sqlite,
     "home_cards",

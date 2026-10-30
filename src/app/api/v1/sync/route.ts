@@ -45,6 +45,16 @@ export async function GET(request: Request) {
     // keep default
   }
 
+  let reactionEmojis: string[] = ["❤️", "🥰", "🥺", "✨", "🔥", "🫶"];
+  try {
+    const parsedEmojis = JSON.parse(user.reactionEmojisJson || '["❤️","🥰","🥺","✨","🔥","🫶"]');
+    if (Array.isArray(parsedEmojis) && parsedEmojis.length > 0) {
+      reactionEmojis = parsedEmojis;
+    }
+  } catch {
+    // keep default
+  }
+
   const serializeCard = (c: HydratedHomeCard) => {
     const authorLabel = formatAuthorLabel({
       authorId: c.authorId,
@@ -172,6 +182,7 @@ export async function GET(request: Request) {
       themeMode: user.themeMode,
       accentPalette: user.accentPalette,
       quickReplies,
+      reactionEmojis,
     },
     partner: partner
       ? {
@@ -187,6 +198,7 @@ export async function GET(request: Request) {
       receivedHistory: allReceived,
       sentHistory: sentSerialized,
       quickReplies,
+      reactionEmojis,
     },
     boards: hydratedBoards,
     actividadesBoardId: String(actividadesBoardId),
