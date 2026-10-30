@@ -172,13 +172,12 @@ class InteractiveDrawingPad extends StatelessWidget {
                         vertical: 5,
                       ),
                       decoration: AmodoroTheme.floatingPerspectiveBox(
-                        fillColor: selected
+                        color: selected
                             ? AmodoroTheme.coralPillLight
                             : (isDark
-                                  ? AmodoroTheme.surfaceDark
-                                  : AmodoroTheme.surfaceLight),
-                        isDark: isDark,
-                        borderRadius: 999,
+                                  ? AmodoroTheme.darkContainer
+                                  : AmodoroTheme.lightContainer),
+                        radius: 999,
                         thickness: 2.0,
                       ),
                       child: Text(
@@ -210,9 +209,8 @@ class InteractiveDrawingPad extends StatelessWidget {
             Container(
               height: 220,
               decoration: AmodoroTheme.floatingPerspectiveBox(
-                fillColor: const Color(0xFFFFFDF9),
-                isDark: false,
-                borderRadius: 22,
+                color: const Color(0xFFFFFDF9),
+                radius: 22,
                 thickness: 2.5,
               ),
               child: ClipRRect(
