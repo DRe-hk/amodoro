@@ -1,8 +1,12 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../models/amodoro_models.dart';
 import '../services/api_client.dart';
 import '../theme/amodoro_theme.dart';
+import '../widgets/flat_avatar.dart';
+import '../widgets/glass_bubble_background.dart';
+import '../widgets/link_preview_card.dart';
 import 'create_card_screen.dart';
 import 'sent_history_screen.dart';
 
@@ -44,106 +48,66 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final latest = sync.latestPartnerCard ??
-        (sync.receivedHistory.isNotEmpty ? sync.receivedHistory.first : null);
-    final previousCards = sync.receivedHistory.length > 1
-        ? sync.receivedHistory.sublist(1)
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final allCards = sync.receivedHistory;
+    final latest = allCards.isNotEmpty ? allCards.first : sync.latestPartnerCard;
+    final previousCards = allCards.length > 1
+        ? allCards.sublist(1)
         : const <HomeCardItem>[];
-    final partnerName =
-        sync.partner?.myGivenNickname ?? sync.me.partnerNicknameGiven;
+
+    final partnerName = sync.partner?.myGivenNickname ??
+        (sync.me.partnerNicknameGiven.isNotEmpty
+            ? sync.me.partnerNicknameGiven
+            : (sync.partner?.displayName ?? 'Pareja'));
 
     return Column(
       children: [
         Expanded(
-          child: RefreshIndicator(
-            onRefresh: onRefresh,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-              children: [
-                if (latest != null) ...[
-                  _buildCardBlock(context, latest, isFeatured: true),
-                ] else ...[
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFDAD6),
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          partnerName.toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.2,
-                            color: Color(0xFF1F1B18),
+          child: latest == null
+              ? _buildEmptyWelcomeVariation(context, isDark, partnerName)
+              : RefreshIndicator(
+                  onRefresh: onRefresh,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(18, 8, 20, 24),
+                    children: [
+                      _buildCardBlock(context, latest, isFeatured: true),
+                      if (previousCards.isNotEmpty) ...[
+                        const SizedBox(height: 28),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text(
+                            'DÍAS ANTERIORES',
+                            style: TextStyle(
+                              fontSize: 11,
+                              letterSpacing: 1.5,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Aún no hay tarjetas recibidas hoy. ¡Envía la primera tocando + CREAR abajo!',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF1F1B18),
+                        const SizedBox(height: 14),
+                        ...previousCards.map(
+                          (c) => Padding(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            child:
+                                _buildCardBlock(context, c, isFeatured: false),
                           ),
                         ),
                       ],
-                    ),
+                    ],
                   ),
-                ],
-
-                if (previousCards.isNotEmpty) ...[
-                  const SizedBox(height: 26),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Text(
-                      'HISTORIAL DE DÍAS ANTERIORES',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.4,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ...previousCards.map(
-                    (c) => Padding(
-                      padding: const EdgeInsets.only(bottom: 20),
-                      child: _buildCardBlock(context, c, isFeatured: false),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+                ),
         ),
 
-        // Barra inferior fija: 🕒 ENVIADOS y + CREAR
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-          decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            border: Border(
-              top: BorderSide(
-                color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
-              ),
-            ),
-          ),
+        // Barra inferior con botones flotantes en perspectiva (ENVIADOS y CREAR en MAYÚSCULAS)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 8, 20, 14),
           child: Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(48),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                  onPressed: () {
+                child: GestureDetector(
+                  onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => SentHistoryScreen(
@@ -153,29 +117,36 @@ class HomeScreen extends StatelessWidget {
                       ),
                     );
                   },
-                  icon: const Icon(Icons.history_rounded, size: 18),
-                  label: Text(
-                    'ENVIADOS (${sync.sentHistory.length})',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.8,
+                  child: Container(
+                    height: 46,
+                    decoration: AmodoroTheme.floatingPerspectiveBox(
+                      color: isDark
+                          ? const Color(0xFF1F2421)
+                          : const Color(0xFFF4EFE8),
+                      radius: 999,
+                      thickness: 2.5,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        AmodoroTheme.sysIcon(Symbols.history, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          'ENVIADOS (${sync.sentHistory.length})',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            letterSpacing: 1.3,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
-                child: FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AmodoroTheme.coralPillLight,
-                    foregroundColor: AmodoroTheme.coralPillTextLight,
-                    minimumSize: const Size.fromHeight(48),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                  onPressed: () async {
+                child: GestureDetector(
+                  onTap: () async {
                     final created = await Navigator.of(context).push<bool>(
                       MaterialPageRoute(
                         builder: (_) => CreateCardScreen(
@@ -188,13 +159,40 @@ class HomeScreen extends StatelessWidget {
                       await onRefresh();
                     }
                   },
-                  icon: const Icon(Icons.add_rounded, size: 20),
-                  label: const Text(
-                    'CREAR',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.0,
+                  child: Container(
+                    height: 46,
+                    decoration: AmodoroTheme.floatingPerspectiveBox(
+                      color: isDark
+                          ? AmodoroTheme.coralPillDark
+                          : AmodoroTheme.coralPillLight,
+                      radius: 999,
+                      thickness: 2.5,
+                      perspectiveEdgeColor: isDark
+                          ? AmodoroTheme.coralPillBorderDark
+                          : AmodoroTheme.coralPillBorderLight,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        AmodoroTheme.sysIcon(
+                          Symbols.add,
+                          size: 19,
+                          color: isDark
+                              ? AmodoroTheme.coralPillTextDark
+                              : AmodoroTheme.coralPillTextLight,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'CREAR',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            letterSpacing: 1.5,
+                            color: isDark
+                                ? AmodoroTheme.coralPillTextDark
+                                : AmodoroTheme.coralPillTextLight,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -206,6 +204,42 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  /// Si no hay ninguna tarjeta recibida, muestra una variación de la pantalla de bienvenida
+  /// con el logo en Playwrite NL Coral y la burbuja Glass emergiendo desde la parte inferior.
+  Widget _buildEmptyWelcomeVariation(
+    BuildContext context,
+    bool isDark,
+    String partnerName,
+  ) {
+    return GlassBubbleBackground(
+      emergeFromBottom: true,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'amodoro',
+                style: AmodoroTheme.logoStyle(fontSize: 42, isDark: isDark),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Aún no hay tarjetas en tu lienzo.\nSorprende a $partnerName creando la primera nota de hoy.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 15,
+                  height: 1.45,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildCardBlock(
     BuildContext context,
     HomeCardItem card, {
@@ -213,57 +247,41 @@ class HomeScreen extends StatelessWidget {
   }) {
     final bg = AmodoroTheme.parseHexColor(card.bgColor);
     final ink = AmodoroTheme.getContrastingInk(bg);
-    final muted = AmodoroTheme.getContrastingMutedInk(bg);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final pillSurface =
+        isDark ? const Color(0xFF1F2421) : const Color(0xFFF4EFE8);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Encabezado con apodo de la pareja y fecha en español
+        // Cabecera con Avatar Flat de quien envió la tarjeta + Apodo/Nombre + Fecha
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AmodoroTheme.coralPillLight.withValues(alpha: 0.22),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      card.authorLabel.toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.1,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
+                  FlatAvatarBadge(
+                    avatarId: card.authorAvatarId,
+                    size: 28,
+                    showPerspectiveBorder: true,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    card.authorLabel.toUpperCase(),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      letterSpacing: 1.3,
                     ),
                   ),
-                  if (isFeatured) ...[
-                    const SizedBox(width: 8),
-                    const Text(
-                      '· BIENVENIDA',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                  ],
                 ],
               ),
               Text(
                 card.dateHeader,
                 style: TextStyle(
                   fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.8,
+                  letterSpacing: 1.1,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -271,46 +289,52 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
 
-        // Tarjeta flotante redondeada (28px)
+        // Tarjeta flotante con borde en perspectiva inferior y derecho (sin sombras difusas)
         Container(
           padding: const EdgeInsets.all(22),
-          decoration: BoxDecoration(
+          decoration: AmodoroTheme.floatingPerspectiveBox(
             color: bg,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.07),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
+            radius: 28,
+            thickness: 3.0,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Foto o dibujo arriba; si es solo texto, NO muestra recuadro arriba
-              if (card.mediaType != 'none' &&
+              if (card.mediaType == 'link' &&
+                  card.linkUrl != null &&
+                  card.linkUrl!.isNotEmpty) ...[
+                LinkPreviewCard(
+                  url: card.linkUrl!,
+                  title: card.linkTitle,
+                  thumbnail: card.linkThumbnail,
+                  platform: card.linkPlatform,
+                  cardBgColor: bg,
+                ),
+                if (card.textContent.isNotEmpty) const SizedBox(height: 16),
+              ] else if (card.mediaType != 'none' &&
                   card.mediaUrl != null &&
                   card.mediaUrl!.isNotEmpty) ...[
                 ClipRRect(
                   borderRadius: BorderRadius.circular(20),
                   child: _buildMediaWidget(api.resolveMediaUrl(card.mediaUrl)),
                 ),
-                const SizedBox(height: 16),
+                if (card.textContent.isNotEmpty) const SizedBox(height: 16),
               ],
-              Text(
-                card.textContent,
-                style: AmodoroTheme.getCardTextStyle(
-                  fontFamily: card.fontFamily,
-                  fontSize: card.fontSize,
-                  color: ink,
+              if (card.textContent.isNotEmpty)
+                Text(
+                  card.textContent,
+                  style: AmodoroTheme.getCardTextStyle(
+                    fontFamily: card.fontFamily,
+                    color: ink,
+                    fontSizePx: card.fontSizePx,
+                    fontSizeKey: card.fontSize,
+                  ),
                 ),
-              ),
               if (card.reactions.isNotEmpty) ...[
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
                 Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: card.reactions.map((r) {
                     final label = [
                       if (r.emoji != null && r.emoji!.isNotEmpty) r.emoji!,
@@ -322,17 +346,29 @@ class HomeScreen extends StatelessWidget {
                         horizontal: 10,
                         vertical: 5,
                       ),
-                      decoration: BoxDecoration(
-                        color: ink.withValues(alpha: 0.13),
-                        borderRadius: BorderRadius.circular(999),
+                      decoration: AmodoroTheme.floatingPerspectiveBox(
+                        color: Colors.white.withValues(alpha: 0.45),
+                        radius: 999,
+                        thickness: 1.8,
+                        perspectiveEdgeColor:
+                            AmodoroTheme.darkenForPerspective(bg, 0.24),
                       ),
-                      child: Text(
-                        '${r.authorLabel}: $label',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w800,
-                          color: ink,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          FlatAvatarBadge(
+                            avatarId: r.authorAvatarId,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${r.authorLabel}: $label',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: Color(0xFF1F1B18),
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   }).toList(),
@@ -341,58 +377,52 @@ class HomeScreen extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
 
-        // Barra de reacciones con emoji + textos predeterminados
+        // Cápsulas de reacción flotantes con borde en perspectiva
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
               ..._reactionEmojis.map((emoji) {
                 return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(999),
+                  padding: const EdgeInsets.only(right: 8, bottom: 4),
+                  child: GestureDetector(
                     onTap: () => _react(context, cardId: card.id, emoji: emoji),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 7,
                       ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainer,
-                        borderRadius: BorderRadius.circular(999),
+                      decoration: AmodoroTheme.floatingPerspectiveBox(
+                        color: pillSurface,
+                        radius: 999,
+                        thickness: 2.0,
                       ),
-                      child: Text(emoji, style: const TextStyle(fontSize: 15)),
+                      child: Text(emoji, style: const TextStyle(fontSize: 14)),
                     ),
                   ),
                 );
               }),
               ...sync.quickReplies.map((reply) {
                 return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(999),
+                  padding: const EdgeInsets.only(right: 8, bottom: 4),
+                  child: GestureDetector(
                     onTap: () =>
                         _react(context, cardId: card.id, presetText: reply),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 13,
+                        horizontal: 14,
                         vertical: 8,
                       ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainer,
-                        borderRadius: BorderRadius.circular(999),
+                      decoration: AmodoroTheme.floatingPerspectiveBox(
+                        color: pillSurface,
+                        radius: 999,
+                        thickness: 2.0,
                       ),
                       child: Text(
                         reply,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: muted == ink
-                              ? null
-                              : Theme.of(context).colorScheme.onSurface,
-                        ),
+                        style: const TextStyle(fontSize: 12),
                       ),
                     ),
                   ),

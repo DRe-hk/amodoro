@@ -2,13 +2,14 @@ export interface AuthorLabelInput {
   authorId: number;
   viewerId: number;
   authorNicknameGivenByPartner?: string | null;
+  authorDisplayName?: string | null;
   authorUsername?: string;
 }
 
 /**
  * Returns the display label for an author relative to the current viewer:
  * - When the author is the viewer themselves, always returns "YO".
- * - Otherwise returns the nickname given by partner, falling back to username, or "Pareja".
+ * - Otherwise returns the nickname given by partner; if not defined, falls back to the author's displayName, then username.
  */
 export function formatAuthorLabel(input: AuthorLabelInput): string {
   if (input.authorId === input.viewerId) {
@@ -17,6 +18,7 @@ export function formatAuthorLabel(input: AuthorLabelInput): string {
 
   return (
     input.authorNicknameGivenByPartner?.trim() ||
+    input.authorDisplayName?.trim() ||
     input.authorUsername ||
     "Pareja"
   );

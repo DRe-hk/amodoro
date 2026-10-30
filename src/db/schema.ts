@@ -22,20 +22,32 @@ export type CardFont = (typeof CARD_FONTS)[number];
 export const CARD_FONT_SIZES = ["sm", "md", "lg", "xl"] as const;
 export type CardFontSize = (typeof CARD_FONT_SIZES)[number];
 
+export const AVATAR_IDS = [
+  "cat",
+  "hippo",
+  "dog",
+  "rabbit",
+  "gray_kitten",
+] as const;
+export type AvatarId = (typeof AVATAR_IDS)[number];
+
 export const users = sqliteTable(
   "users",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     username: text("username").notNull(),
     passwordHash: text("password_hash").notNull(),
+    displayName: text("display_name").notNull().default(""),
+    avatarId: text("avatar_id").notNull().default("cat"),
+    partnerId: integer("partner_id"),
     /**
      * The nickname that the OTHER person gave to this user.
-     * - In Settings, this user can see: "El apodo que te puso tu pareja: <nicknameByPartner>".
-     * - When this user's posts are shown to the partner, the partner sees `<nicknameByPartner>`.
-     * - When this user views their own posts, they ALWAYS see "YO".
+     * If empty, falls back to displayName or username.
      */
-    nicknameByPartner: text("nickname_by_partner").notNull().default("Amor"),
-    themeMode: text("theme_mode", { enum: THEME_MODES }).notNull().default("light"),
+    nicknameByPartner: text("nickname_by_partner").notNull().default(""),
+    themeMode: text("theme_mode", { enum: THEME_MODES })
+      .notNull()
+      .default("light"),
     accentPalette: text("accent_palette", { enum: ACCENT_PALETTE_IDS })
       .notNull()
       .default("fig-sage"),
@@ -43,11 +55,11 @@ export const users = sqliteTable(
       .notNull()
       .default(
         JSON.stringify([
-          "Te amo ❤️",
-          "Me alegraste el día ✨",
-          "Qué bonito 🥺",
-          "Te extraño mucho 💌",
-          "Me sacaste una sonrisa 🥰",
+          "Te amo",
+          "Me alegraste el día",
+          "Qué bonito",
+          "Te extraño mucho",
+          "Me sacaste una sonrisa",
         ]),
       ),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
@@ -117,14 +129,20 @@ export const homeCards = sqliteTable(
     mediaId: integer("media_id").references(() => media.id, {
       onDelete: "set null",
     }),
+    mediaType: text("media_type").notNull().default("none"),
+    linkUrl: text("link_url"),
+    linkTitle: text("link_title"),
+    linkThumbnail: text("link_thumbnail"),
+    linkPlatform: text("link_platform"),
     body: text("body").notNull(),
-    bgColor: text("bg_color").notNull().default("#FADADD"),
+    bgColor: text("bg_color").notNull().default("#FFDAD6"),
     fontFamily: text("font_family", { enum: CARD_FONTS })
       .notNull()
       .default("sans"),
     fontSize: text("font_size", { enum: CARD_FONT_SIZES })
       .notNull()
       .default("md"),
+    fontSizePx: integer("font_size_px").notNull().default(18),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
   (t) => [index("home_cards_author_idx").on(t.authorId, t.createdAt)],
@@ -154,6 +172,7 @@ export const boards = sqliteTable(
     slug: text("slug").notNull(),
     title: text("title").notNull(),
     icon: text("icon").notNull().default("sparkles"),
+    bgColor: text("bg_color").notNull().default("#F4EFE8"),
     isSystem: integer("is_system", { mode: "boolean" }).notNull().default(false),
     createdBy: integer("created_by").references(() => users.id, {
       onDelete: "set null",
@@ -170,11 +189,15 @@ export const boardItems = sqliteTable(
     boardId: integer("board_id")
       .notNull()
       .references(() => boards.id, { onDelete: "cascade" }),
-    categoryTag: text("category_tag").notNull().default("IDEA"),
+    categoryTag: text("category_tag").notNull().default("PENDIENTE"),
     title: text("title").notNull(),
     notes: text("notes"),
     url: text("url"),
+    linkTitle: text("link_title"),
+    linkThumbnail: text("link_thumbnail"),
+    linkPlatform: text("link_platform"),
     emoji: text("emoji"),
+    bgColor: text("bg_color").notNull().default("#FFDAD6"),
     mediaId: integer("media_id").references(() => media.id, {
       onDelete: "set null",
     }),
@@ -198,7 +221,6 @@ export const decisionSessions = sqliteTable("decision_sessions", {
   mode: text("mode", { enum: DECISION_MODES }).notNull(),
   status: text("status", { enum: DECISION_STATUSES }).notNull(),
   roundNumber: integer("round_number").notNull().default(1),
-  /** JSON array of 4 or 5 candidate item IDs in the current round */
   candidateItemIdsJson: text("candidate_item_ids_json").notNull(),
   winnerItemId: integer("winner_item_id").references(() => boardItems.id, {
     onDelete: "set null",

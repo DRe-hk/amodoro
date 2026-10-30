@@ -1,6 +1,6 @@
 import { createInviteForUser, updateUserSettings } from "@/lib/auth";
 import { CORS_HEADERS, getApiUser, jsonResponse } from "@/lib/api-auth";
-import type { AccentPalette, ThemeMode } from "@/db/schema";
+import type { AccentPalette, AvatarId, ThemeMode } from "@/db/schema";
 
 export async function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -15,6 +15,8 @@ export async function POST(request: Request) {
   try {
     const payload = (await request.json()) as {
       action: "update_settings" | "create_invite";
+      displayName?: string;
+      avatarId?: AvatarId;
       partnerNickname?: string;
       themeMode?: ThemeMode;
       accentPalette?: AccentPalette;
@@ -24,6 +26,8 @@ export async function POST(request: Request) {
     if (payload.action === "update_settings") {
       updateUserSettings({
         userId: user.id,
+        displayName: payload.displayName,
+        avatarId: payload.avatarId,
         partnerNickname: payload.partnerNickname,
         themeMode: payload.themeMode,
         accentPalette: payload.accentPalette,

@@ -21,29 +21,26 @@ export type HydratedHomeCard = {
   id: number;
   authorId: number;
   authorUsername: string;
+  authorDisplayName: string;
+  authorAvatarId: string;
   authorNicknameByPartner: string;
   mediaId: number | null;
+  mediaType: string;
+  linkUrl: string | null;
+  linkTitle: string | null;
+  linkThumbnail: string | null;
+  linkPlatform: string | null;
   body: string;
   bgColor: string;
   fontFamily: CardFont;
   fontSize: CardFontSize;
+  fontSizePx: number;
   createdAt: Date;
   reactions: ReactionItem[];
 };
 
 function attachReactions(
-  rows: {
-    id: number;
-    authorId: number;
-    authorUsername: string;
-    authorNicknameByPartner: string;
-    mediaId: number | null;
-    body: string;
-    bgColor: string;
-    fontFamily: CardFont;
-    fontSize: CardFontSize;
-    createdAt: Date;
-  }[],
+  rows: Omit<HydratedHomeCard, "reactions">[],
 ): HydratedHomeCard[] {
   if (rows.length === 0) return [];
   const cardIds = rows.map((r) => r.id);
@@ -76,12 +73,20 @@ export function getReceivedHomeCards(viewerId: number): {
       id: homeCards.id,
       authorId: homeCards.authorId,
       authorUsername: users.username,
+      authorDisplayName: users.displayName,
+      authorAvatarId: users.avatarId,
       authorNicknameByPartner: users.nicknameByPartner,
       mediaId: homeCards.mediaId,
+      mediaType: homeCards.mediaType,
+      linkUrl: homeCards.linkUrl,
+      linkTitle: homeCards.linkTitle,
+      linkThumbnail: homeCards.linkThumbnail,
+      linkPlatform: homeCards.linkPlatform,
       body: homeCards.body,
       bgColor: homeCards.bgColor,
       fontFamily: homeCards.fontFamily,
       fontSize: homeCards.fontSize,
+      fontSizePx: homeCards.fontSizePx,
       createdAt: homeCards.createdAt,
     })
     .from(homeCards)
@@ -103,12 +108,20 @@ export function getSentHomeCards(viewerId: number): HydratedHomeCard[] {
       id: homeCards.id,
       authorId: homeCards.authorId,
       authorUsername: users.username,
+      authorDisplayName: users.displayName,
+      authorAvatarId: users.avatarId,
       authorNicknameByPartner: users.nicknameByPartner,
       mediaId: homeCards.mediaId,
+      mediaType: homeCards.mediaType,
+      linkUrl: homeCards.linkUrl,
+      linkTitle: homeCards.linkTitle,
+      linkThumbnail: homeCards.linkThumbnail,
+      linkPlatform: homeCards.linkPlatform,
       body: homeCards.body,
       bgColor: homeCards.bgColor,
       fontFamily: homeCards.fontFamily,
       fontSize: homeCards.fontSize,
+      fontSizePx: homeCards.fontSizePx,
       createdAt: homeCards.createdAt,
     })
     .from(homeCards)
@@ -123,25 +136,58 @@ export function getSentHomeCards(viewerId: number): HydratedHomeCard[] {
 export function createHomeCard(input: {
   authorId: number;
   mediaId?: number | null;
+  mediaType?: string;
+  linkUrl?: string | null;
+  linkTitle?: string | null;
+  linkThumbnail?: string | null;
+  linkPlatform?: string | null;
   body: string;
   bgColor: string;
   fontFamily: CardFont;
   fontSize: CardFontSize;
+  fontSizePx?: number;
 }) {
   const cleanBody = input.body.trim();
-  if (!cleanBody && !input.mediaId) {
-    throw new Error("Escribe un mensaje o añade una imagen/dibujo.");
+  const cleanLink = input.linkUrl?.trim() || null;
+
+  if (!cleanBody && !input.mediaId && !cleanLink) {
+    throw new Error("Escribe un mensaje o añade una imagen, dibujo o link.");
   }
+
+  let resolvedMediaType = input.mediaType || "none";
+  if (input.mediaId && resolvedMediaType === "none") {
+    resolvedMediaType = "photo";
+  } else if (cleanLink) {
+    resolvedMediaType = "link";
+  } else if (!input.mediaId && !cleanLink) {
+    resolvedMediaType = "none";
+  }
+
+  const sizePx =
+    input.fontSizePx ??
+    (input.fontSize === "sm"
+      ? 14
+      : input.fontSize === "lg"
+        ? 22
+        : input.fontSize === "xl"
+          ? 28
+          : 18);
 
   return db
     .insert(homeCards)
     .values({
       authorId: input.authorId,
       mediaId: input.mediaId ?? null,
+      mediaType: resolvedMediaType,
+      linkUrl: cleanLink,
+      linkTitle: input.linkTitle?.trim() || null,
+      linkThumbnail: input.linkThumbnail?.trim() || null,
+      linkPlatform: input.linkPlatform?.trim() || null,
       body: cleanBody,
-      bgColor: input.bgColor || "#FADADD",
+      bgColor: input.bgColor || "#FFDAD6",
       fontFamily: input.fontFamily || "sans",
       fontSize: input.fontSize || "md",
+      fontSizePx: sizePx,
       createdAt: new Date(),
     })
     .returning()
@@ -158,7 +204,6 @@ export function reactToHomeCard(input: {
   const presetText = input.presetText?.trim() || null;
   if (!emoji && !presetText) return;
 
-  // Check if this user already reacted to this card; update or insert
   const existing = db
     .select()
     .from(homeCardReactions)

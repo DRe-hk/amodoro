@@ -74,14 +74,14 @@ class _AmodoroAppState extends State<AmodoroApp> {
   ThemeMode _resolveThemeMode() {
     final mode = _sync?.me.themeMode ?? 'light';
     if (mode == 'dark') return ThemeMode.dark;
-    if (mode == 'auto') return ThemeMode.system;
+    if (mode == 'auto' || mode == 'system') return ThemeMode.system;
     return ThemeMode.light;
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Amodoro',
+      title: 'amodoro',
       debugShowCheckedModeBanner: false,
       theme: AmodoroTheme.lightTheme(),
       darkTheme: AmodoroTheme.darkTheme(),
@@ -101,77 +101,18 @@ class _AmodoroAppState extends State<AmodoroApp> {
     if (_loading && _sync == null) {
       return Scaffold(
         body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(
-                color: AmodoroTheme.coralPillLight,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Sincronizando con Amodoro VPS...',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-            ],
+          child: Text(
+            'amodoro',
+            style: AmodoroTheme.logoStyle(fontSize: 36),
           ),
         ),
       );
     }
 
     if (_error != null && _sync == null) {
-      return Scaffold(
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.cloud_off_rounded,
-                    size: 48,
-                    color: AmodoroTheme.coralPillLight,
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'No se pudo conectar con el servidor',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _error!,
-                    style: const TextStyle(fontSize: 13),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      OutlinedButton(
-                        onPressed: _handleLogout,
-                        child: const Text('Cambiar cuenta / servidor'),
-                      ),
-                      const SizedBox(width: 12),
-                      FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AmodoroTheme.coralPillLight,
-                          foregroundColor: AmodoroTheme.coralPillTextLight,
-                        ),
-                        onPressed: _loadSync,
-                        child: const Text('Reintentar'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+      return LoginScreen(
+        api: widget.api,
+        onLoggedIn: _loadSync,
       );
     }
 

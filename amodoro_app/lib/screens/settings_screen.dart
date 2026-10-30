@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../models/amodoro_models.dart';
 import '../services/api_client.dart';
 import '../theme/amodoro_theme.dart';
+import '../widgets/flat_avatar.dart';
 
 class SettingsScreen extends StatefulWidget {
   final SyncPayload sync;
@@ -22,62 +24,99 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  late String _avatarId;
+  late final TextEditingController _myDisplayNameCtrl;
   late final TextEditingController _partnerNicknameCtrl;
-  late final TextEditingController _quickRepliesCtrl;
+  late final TextEditingController _newReplyCtrl;
   late String _themeMode;
-  late String _accentPalette;
+  late List<String> _quickReplies;
+
   bool _saving = false;
+  bool _addingReply = false;
   String? _generatedInvite;
 
   @override
   void initState() {
     super.initState();
+    _avatarId = widget.sync.me.avatarId;
+    _myDisplayNameCtrl =
+        TextEditingController(text: widget.sync.me.displayName);
     _partnerNicknameCtrl =
         TextEditingController(text: widget.sync.me.partnerNicknameGiven);
-    _quickRepliesCtrl = TextEditingController(
-      text: widget.sync.me.quickReplies.join('\n'),
-    );
-    _themeMode = widget.sync.me.themeMode;
-    _accentPalette = widget.sync.me.accentPalette;
+    _newReplyCtrl = TextEditingController();
+    _themeMode = widget.sync.me.themeMode == 'auto'
+        ? 'system'
+        : widget.sync.me.themeMode;
+    if (!['light', 'dark', 'system'].contains(_themeMode)) {
+      _themeMode = 'light';
+    }
+    _quickReplies = List<String>.from(widget.sync.me.quickReplies);
   }
 
   @override
   void dispose() {
+    _myDisplayNameCtrl.dispose();
     _partnerNicknameCtrl.dispose();
-    _quickRepliesCtrl.dispose();
+    _newReplyCtrl.dispose();
     super.dispose();
+  }
+
+  void _onSelectAvatar(String id) {
+    setState(() {
+      _avatarId = id;
+      // Easter egg: si elige el gatito gris bebé ('gray_kitten'),
+      // el campo de nombre cambia automáticamente a "zafiro" (sin guardarse solo, editable ahí mismo).
+      if (id == 'gray_kitten') {
+        _myDisplayNameCtrl.text = 'zafiro';
+        _myDisplayNameCtrl.selection = TextSelection.fromPosition(
+          TextPosition(offset: _myDisplayNameCtrl.text.length),
+        );
+      }
+    });
   }
 
   Future<void> _saveSettings() async {
     setState(() => _saving = true);
     try {
-      final replies = _quickRepliesCtrl.text
-          .split('\n')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
-
       await widget.api.updateSettings(
+        displayName: _myDisplayNameCtrl.text.trim(),
+        avatarId: _avatarId,
         partnerNickname: _partnerNicknameCtrl.text.trim(),
         themeMode: _themeMode,
-        accentPalette: _accentPalette,
-        quickReplies: replies,
+        accentPalette: widget.sync.me.accentPalette,
+        quickReplies: _quickReplies,
       );
       await widget.onRefresh();
       if (mounted) {
         setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ajustes guardados y sincronizados ✨')),
+          const SnackBar(content: Text('Ajustes actualizados')),
         );
       }
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al guardar: $e')),
+          SnackBar(content: Text('Error: $e')),
         );
       }
     }
+  }
+
+  void _addReplyPhrase() {
+    final txt = _newReplyCtrl.text.trim();
+    if (txt.isEmpty) return;
+    setState(() {
+      _quickReplies.add(txt);
+      _newReplyCtrl.clear();
+      _addingReply = false;
+    });
+  }
+
+  void _removeReplyAt(int index) {
+    setState(() {
+      _quickReplies.removeAt(index);
+    });
   }
 
   Future<void> _generateInvite() async {
@@ -89,7 +128,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al generar código: $e')),
+          SnackBar(content: Text('Error: $e')),
         );
       }
     }
@@ -97,186 +136,354 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface =
+        isDark ? const Color(0xFF1F2421) : const Color(0xFFF4EFE8);
+    final coralBg =
+        isDark ? AmodoroTheme.coralPillDark : AmodoroTheme.coralPillLight;
+    final coralInk = isDark
+        ? AmodoroTheme.coralPillTextDark
+        : AmodoroTheme.coralPillTextLight;
     final me = widget.sync.me;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+      padding: const EdgeInsets.fromLTRB(20, 12, 22, 30),
       children: [
-        // Tarjeta 1: Regla de apodos cruzados (YO vs Apodo de tu pareja)
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFDAD6),
-            borderRadius: BorderRadius.circular(26),
+        // 1. Parte superior: Avatar predefinido en estilo Flat elegido por el usuario
+        Center(
+          child: FlatAvatarBadge(
+            avatarId: _avatarId,
+            size: 88,
+            showPerspectiveBorder: true,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'IDENTIDAD CRUZADA · REGLA YO / APODO',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.3,
-                  color: Color(0xFF3B0D09),
+        ),
+        const SizedBox(height: 14),
+        FlatAvatarSelector(
+          selectedAvatarId: _avatarId,
+          onSelect: _onSelectAvatar,
+        ),
+        const SizedBox(height: 16),
+
+        // 2. Debajo: El nombre que el usuario se puso a sí mismo
+        Center(
+          child: SizedBox(
+            width: 220,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: AmodoroTheme.floatingPerspectiveBox(
+                color: surface,
+                radius: 999,
+                thickness: 2.0,
+              ),
+              child: TextField(
+                controller: _myDisplayNameCtrl,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16, letterSpacing: 0.6),
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  hintText: 'Tu nombre',
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(vertical: 10),
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Apodo que tu pareja te puso: "${me.nicknameByPartner}"',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF1F1B18),
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Cada persona elige el apodo del otro. En tu pantalla, todas tus propias tarjetas e ítems siempre muestran "YO", mientras que tu pareja los ve con el apodo que te asignó.',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: Color(0xFF4E453E),
-                  height: 1.35,
-                ),
-              ),
-            ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        // 3. Debajo en una sola línea: el apodo que le puso la otra persona (sin explicaciones)
+        Center(
+          child: Text(
+            me.nicknameByPartner,
+            style: TextStyle(
+              fontSize: 13.5,
+              letterSpacing: 1.1,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // 4. Apodo que tú le pones a tu pareja
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          decoration: AmodoroTheme.floatingPerspectiveBox(
+            color: surface,
+            radius: 20,
+            thickness: 2.5,
+          ),
+          child: TextField(
+            controller: _partnerNicknameCtrl,
+            decoration: InputDecoration(
+              border: InputBorder.none,
+              labelText: 'APODO DE TU PAREJA',
+              labelStyle: const TextStyle(fontSize: 11, letterSpacing: 1.2),
+              icon: AmodoroTheme.sysIcon(Symbols.favorite, size: 20),
+            ),
           ),
         ),
         const SizedBox(height: 16),
 
-        // Tarjeta 2: Editar el apodo que le das a tu pareja
+        // 5. Selector de Tema en menú desplegable con iconos del sistema (sin emojis ni texto Material Design 3)
         Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainer,
-            borderRadius: BorderRadius.circular(24),
+          height: 50,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: AmodoroTheme.floatingPerspectiveBox(
+            color: surface,
+            radius: 999,
+            thickness: 2.5,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Apodo que tú le das a tu pareja',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _partnerNicknameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Apodo de tu pareja (ej. Mi Cielo, Amor)',
-                  prefixIcon: Icon(Icons.favorite_border_rounded),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Tema visual Material Design 3',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'light', label: Text('☀️ Claro')),
-                  ButtonSegment(value: 'dark', label: Text('🌙 Oscuro')),
-                  ButtonSegment(value: 'auto', label: Text('⚡ Auto')),
-                ],
-                selected: {_themeMode},
-                onSelectionChanged: (s) {
-                  setState(() => _themeMode = s.first);
-                },
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Textos predeterminados de respuesta rápida (1 por línea)',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _quickRepliesCtrl,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  hintText: 'Te amo ❤️\n¡Qué lindo! 🥰\n¡Sí, hagámoslo! ✨',
-                ),
-              ),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: AmodoroTheme.coralPillLight,
-                  foregroundColor: AmodoroTheme.coralPillTextLight,
-                  minimumSize: const Size.fromHeight(50),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _themeMode,
+              isExpanded: true,
+              icon: AmodoroTheme.sysIcon(Symbols.expand_more, size: 20),
+              items: [
+                DropdownMenuItem(
+                  value: 'light',
+                  child: Row(
+                    children: [
+                      AmodoroTheme.sysIcon(Symbols.light_mode, size: 18),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'TEMA CLARO',
+                        style: TextStyle(fontSize: 12.5, letterSpacing: 1.2),
+                      ),
+                    ],
                   ),
                 ),
-                onPressed: _saving ? null : _saveSettings,
-                icon: const Icon(Icons.save_rounded),
-                label: Text(
-                  _saving ? 'Guardando...' : 'Guardar Ajustes',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                DropdownMenuItem(
+                  value: 'dark',
+                  child: Row(
+                    children: [
+                      AmodoroTheme.sysIcon(Symbols.dark_mode, size: 18),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'TEMA OSCURO',
+                        style: TextStyle(fontSize: 12.5, letterSpacing: 1.2),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                DropdownMenuItem(
+                  value: 'system',
+                  child: Row(
+                    children: [
+                      AmodoroTheme.sysIcon(Symbols.contrast, size: 18),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'TEMA AUTOMÁTICO',
+                        style: TextStyle(fontSize: 12.5, letterSpacing: 1.2),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              onChanged: (val) {
+                if (val != null) setState(() => _themeMode = val);
+              },
+            ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 22),
 
-        // Tarjeta 3: Código de Invitación y Sesión VPS
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainer,
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Vínculo de Pareja y Servidor VPS',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Conectado a: ${widget.api.baseUrl} · Usuario: @${me.username}',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+        // 6. Lista de textos predeterminados con botón de añadir (*) y botón de eliminar al lado de cada frase
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'RESPUESTAS PREDETERMINADAS',
+              style: TextStyle(fontSize: 11.5, letterSpacing: 1.3),
+            ),
+            GestureDetector(
+              onTap: () => setState(() => _addingReply = !_addingReply),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: AmodoroTheme.floatingPerspectiveBox(
+                  color: surface,
+                  radius: 999,
+                  thickness: 2.0,
+                ),
+                child: const Text(
+                  '* AÑADIR',
+                  style: TextStyle(fontSize: 11, letterSpacing: 1.2),
                 ),
               ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: _generateInvite,
-                icon: const Icon(Icons.vpn_key_rounded, size: 18),
-                label: const Text('Generar código de invitación (8 caracteres)'),
-              ),
-              if (_generatedInvite != null) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AmodoroTheme.coralPillLight.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(16),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (_addingReply) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: AmodoroTheme.floatingPerspectiveBox(
+                      color: surface,
+                      radius: 18,
+                      thickness: 2.0,
+                    ),
+                    child: TextField(
+                      controller: _newReplyCtrl,
+                      autofocus: true,
+                      onSubmitted: (_) => _addReplyPhrase(),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        hintText: 'Nueva frase...',
+                      ),
+                    ),
                   ),
-                  child: Center(
-                    child: SelectableText(
-                      _generatedInvite!,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 2.0,
+                ),
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: _addReplyPhrase,
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: AmodoroTheme.floatingPerspectiveBox(
+                      color: coralBg,
+                      radius: 999,
+                      thickness: 2.0,
+                    ),
+                    child: Center(
+                      child: AmodoroTheme.sysIcon(
+                        Symbols.check,
+                        size: 20,
+                        color: coralInk,
                       ),
                     ),
                   ),
                 ),
               ],
-              const SizedBox(height: 12),
-              TextButton.icon(
-                style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-                onPressed: widget.onLogout,
-                icon: const Icon(Icons.logout_rounded),
-                label: const Text(
-                  'Cerrar sesión',
-                  style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+        ...List.generate(_quickReplies.length, (i) {
+          final phrase = _quickReplies[i];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: AmodoroTheme.floatingPerspectiveBox(
+                color: surface,
+                radius: 18,
+                thickness: 2.0,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      phrase,
+                      style: const TextStyle(fontSize: 13.5),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => _removeReplyAt(i),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: AmodoroTheme.sysIcon(
+                        Symbols.delete,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+        const SizedBox(height: 16),
+
+        // Botón Guardar
+        GestureDetector(
+          onTap: _saving ? null : _saveSettings,
+          child: Container(
+            height: 48,
+            decoration: AmodoroTheme.floatingPerspectiveBox(
+              color: coralBg,
+              radius: 999,
+              thickness: 2.5,
+              perspectiveEdgeColor: isDark
+                  ? AmodoroTheme.coralPillBorderDark
+                  : AmodoroTheme.coralPillBorderLight,
+            ),
+            child: Center(
+              child: Text(
+                _saving ? 'GUARDANDO...' : 'GUARDAR CAMBIOS',
+                style: TextStyle(
+                  fontSize: 12,
+                  letterSpacing: 1.5,
+                  color: coralInk,
                 ),
               ),
-            ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // 7. Debajo: únicamente el botón de generar código de invitación
+        GestureDetector(
+          onTap: _generateInvite,
+          child: Container(
+            height: 48,
+            decoration: AmodoroTheme.floatingPerspectiveBox(
+              color: surface,
+              radius: 999,
+              thickness: 2.5,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AmodoroTheme.sysIcon(Symbols.key, size: 18),
+                const SizedBox(width: 8),
+                const Text(
+                  'GENERAR CÓDIGO DE INVITACIÓN',
+                  style: TextStyle(
+                    fontSize: 12,
+                    letterSpacing: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_generatedInvite != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
+            decoration: AmodoroTheme.floatingPerspectiveBox(
+              color: const Color(0xFFFFDAD6),
+              radius: 20,
+              thickness: 2.5,
+            ),
+            child: Center(
+              child: SelectableText(
+                _generatedInvite!,
+                style: const TextStyle(
+                  fontSize: 22,
+                  letterSpacing: 2.4,
+                  color: Color(0xFF1F1B18),
+                ),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 18),
+        Center(
+          child: GestureDetector(
+            onTap: widget.onLogout,
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: AmodoroTheme.sysIcon(
+                Symbols.logout,
+                size: 20,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
         ),
       ],

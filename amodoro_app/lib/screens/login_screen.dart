@@ -1,16 +1,21 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../models/amodoro_models.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../services/api_client.dart';
 import '../theme/amodoro_theme.dart';
+import '../widgets/flat_avatar.dart';
+import '../widgets/glass_bubble_background.dart';
 
 class LoginScreen extends StatefulWidget {
   final AmodoroApiClient api;
   final VoidCallback onLoggedIn;
+  final int initialStep; // 0: Bienvenida/Login, 1: Registro (Avatar+Nombre), 2: Emparejar
 
   const LoginScreen({
     super.key,
     required this.api,
     required this.onLoggedIn,
+    this.initialStep = 0,
   });
 
   @override
@@ -18,115 +23,152 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  int _modeIndex = 0; // 0: 1-Toque, 1: Usuario/Clave, 2: Código
+  late int _step; // 0: Login/Bienvenida, 1: Registro (Avatar y Nombre), 2: Código de Emparejamiento
   bool _loading = false;
   String? _error;
-  bool _editingServer = false;
 
-  late final TextEditingController _serverController;
-  final TextEditingController _usernameController =
-      TextEditingController(text: 'drehk');
-  final TextEditingController _passwordController =
-      TextEditingController(text: 'amodoro2025');
-  final TextEditingController _codeController = TextEditingController();
+  // Login controllers
+  final TextEditingController _loginUserCtrl = TextEditingController();
+  final TextEditingController _loginPassCtrl = TextEditingController();
 
-  List<AuthProfileOption> _profiles = const [
-    AuthProfileOption(id: 1, username: 'drehk', partnerNickname: 'Rey'),
-    AuthProfileOption(id: 2, username: 'pareja', partnerNickname: 'Cielo'),
-  ];
+  // Register controllers (Paso 1: Avatar + Nombre)
+  String _selectedAvatarId = 'cat';
+  final TextEditingController _registerNameCtrl = TextEditingController();
+  final TextEditingController _registerPassCtrl = TextEditingController();
+
+  // Pairing controllers (Paso 2: Código de emparejamiento)
+  final TextEditingController _pairCodeCtrl = TextEditingController();
+  String? _myInviteCode;
 
   @override
   void initState() {
     super.initState();
-    _serverController = TextEditingController(text: widget.api.baseUrl);
-    _fetchProfiles();
+    _step = widget.initialStep;
   }
 
   @override
   void dispose() {
-    _serverController.dispose();
-    _usernameController.dispose();
-    _passwordController.dispose();
-    _codeController.dispose();
+    _loginUserCtrl.dispose();
+    _loginPassCtrl.dispose();
+    _registerNameCtrl.dispose();
+    _registerPassCtrl.dispose();
+    _pairCodeCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _fetchProfiles() async {
-    try {
-      final list = await widget.api.fetchAuthProfiles();
-      if (mounted && list.isNotEmpty) {
-        setState(() {
-          _profiles = list;
-        });
+  void _onSelectRegisterAvatar(String avatarId) {
+    setState(() {
+      _selectedAvatarId = avatarId;
+      // Easter egg: si el avatar elegido es el gatito gris bebé ('gray_kitten'),
+      // el campo de nombre cambia automáticamente a "zafiro" (editable y sin guardarse solo).
+      if (avatarId == 'gray_kitten') {
+        _registerNameCtrl.text = 'zafiro';
+        _registerNameCtrl.selection = TextSelection.fromPosition(
+          TextPosition(offset: _registerNameCtrl.text.length),
+        );
       }
-    } catch (_) {
-      // Usa perfiles predeterminados si aún no responde
-    }
+    });
   }
 
-  Future<void> _loginQuick(int userId) async {
+  Future<void> _submitLogin() async {
+    if (_loginUserCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Ingresa tu nombre o usuario');
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      await widget.api.loginQuick(userId);
-      widget.onLoggedIn();
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString().replaceFirst('Exception: ', '');
-          _loading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _loginPassword() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      await widget.api.loginPassword(
-        _usernameController.text,
-        _passwordController.text,
+      final res = await widget.api.loginPassword(
+        _loginUserCtrl.text.trim(),
+        _loginPassCtrl.text.isEmpty ? 'amodoro2025' : _loginPassCtrl.text,
       );
-      widget.onLoggedIn();
+      final isPaired = res['isPaired'] == true;
+      if (isPaired) {
+        widget.onLoggedIn();
+      } else if (mounted) {
+        setState(() {
+          _loading = false;
+          _step = 2;
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString().replaceFirst('Exception: ', '');
           _loading = false;
+          _error = e.toString().replaceFirst('Exception: ', '');
         });
       }
     }
   }
 
-  Future<void> _loginCode() async {
+  Future<void> _submitRegister() async {
+    final name = _registerNameCtrl.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'Escribe tu nombre debajo de tu avatar');
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      await widget.api.loginInviteCode(_codeController.text);
-      widget.onLoggedIn();
+      await widget.api.registerAccount(
+        displayName: name,
+        avatarId: _selectedAvatarId,
+        password: _registerPassCtrl.text,
+      );
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _step = 2; // Pasa a la pantalla del código de emparejamiento
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString().replaceFirst('Exception: ', '');
           _loading = false;
+          _error = e.toString().replaceFirst('Exception: ', '');
         });
       }
     }
   }
 
-  Future<void> _saveServerUrl() async {
-    await widget.api.setBaseUrl(_serverController.text);
+  Future<void> _submitPairCode() async {
+    final code = _pairCodeCtrl.text.trim();
+    if (code.isEmpty) {
+      setState(() => _error = 'Introduce el código de invitación de tu pareja');
+      return;
+    }
     setState(() {
-      _editingServer = false;
+      _loading = true;
+      _error = null;
     });
-    await _fetchProfiles();
+    try {
+      await widget.api.pairWithCode(code);
+      widget.onLoggedIn();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
+  }
+
+  Future<void> _generateMyPairCode() async {
+    try {
+      final code = await widget.api.createInviteCode();
+      if (mounted) {
+        setState(() => _myInviteCode = code);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      }
+    }
   }
 
   @override
@@ -137,327 +179,352 @@ class _LoginScreenState extends State<LoginScreen> {
     final coralInk = isDark
         ? AmodoroTheme.coralPillTextDark
         : AmodoroTheme.coralPillTextLight;
+    final cardSurface = isDark
+        ? const Color(0xFF1F2421).withValues(alpha: 0.72)
+        : const Color(0xFFF4EFE8).withValues(alpha: 0.76);
 
     return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Cabecera Amodoro
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFDAD6),
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AmodoroTheme.coralPillLight,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: const Text(
-                        'AMODORO · ESPACIO COMPARTIDO',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.4,
-                          color: AmodoroTheme.coralPillTextLight,
+      body: GlassBubbleBackground(
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_step == 0) ...[
+                    // Pantalla de Bienvenida / Login con Logo grande en Playwrite NL Coral + Mensaje
+                    Center(
+                      child: Text(
+                        'amodoro',
+                        style: AmodoroTheme.logoStyle(
+                          fontSize: 46,
+                          isDark: isDark,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'Nuestro rincón privado',
+                    const SizedBox(height: 12),
+                    Text(
+                      'Un espacio íntimo para compartir días, ideas y decisiones entre dos.',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF1F1B18),
-                        height: 1.15,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Tarjetas diarias con foto o dibujo, tableros compartidos y decisión en pareja sin fricción. Tus propios mensajes siempre dicen YO.',
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        color: Color(0xFF4E453E),
+                        fontSize: 15,
                         height: 1.4,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Barra de conexión al servidor VPS Azure
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainer,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.cloud_done_rounded,
-                            size: 18, color: coralBg),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'VPS Azure: ${widget.api.baseUrl}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        TextButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _editingServer = !_editingServer;
-                            });
-                          },
-                          icon: const Icon(Icons.tune_rounded, size: 15),
-                          label: Text(_editingServer ? 'Cerrar' : 'Cambiar'),
-                        ),
-                      ],
-                    ),
-                    if (_editingServer) ...[
-                      const SizedBox(height: 8),
-                      Row(
+                    const SizedBox(height: 28),
+                    _buildGlassPanel(
+                      cardSurface: cardSurface,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _serverController,
-                              decoration: const InputDecoration(
-                                labelText: 'URL del Servidor VPS',
-                                hintText: 'http://68.211.73.23',
-                                isDense: true,
-                              ),
-                            ),
+                          if (_error != null) _buildErrorBanner(_error!),
+                          _buildPerspectiveField(
+                            controller: _loginUserCtrl,
+                            hint: 'Nombre o usuario',
+                            icon: Symbols.person,
+                            isDark: isDark,
                           ),
-                          const SizedBox(width: 8),
-                          FilledButton(
-                            onPressed: _saveServerUrl,
-                            child: const Text('Guardar'),
+                          const SizedBox(height: 14),
+                          _buildPerspectiveField(
+                            controller: _loginPassCtrl,
+                            hint: 'Contraseña',
+                            icon: Symbols.lock,
+                            obscure: true,
+                            isDark: isDark,
+                          ),
+                          const SizedBox(height: 20),
+                          _buildPerspectiveButton(
+                            label: _loading ? 'ENTRANDO...' : 'INICIAR SESIÓN',
+                            bgColor: coralBg,
+                            inkColor: coralInk,
+                            onTap: _loading ? null : _submitLogin,
+                          ),
+                          const SizedBox(height: 12),
+                          _buildPerspectiveButton(
+                            label: 'CREAR CUENTA',
+                            bgColor: isDark
+                                ? const Color(0xFF282F2B)
+                                : const Color(0xFFFCF9F5),
+                            inkColor: Theme.of(context).colorScheme.onSurface,
+                            onTap: () {
+                              setState(() {
+                                _error = null;
+                                _step = 1;
+                              });
+                            },
                           ),
                         ],
                       ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-
-              // Selector de método de ingreso
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainer,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Row(
-                  children: [
-                    _buildModeTab(0, '✨ 1-Toque', coralBg, coralInk),
-                    _buildModeTab(1, '🔑 Clave', coralBg, coralInk),
-                    _buildModeTab(2, '💌 Código', coralBg, coralInk),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-
-              if (_error != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  margin: const EdgeInsets.only(bottom: 14),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(
-                      color: Colors.redAccent,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
                     ),
-                  ),
-                ),
-              ],
-
-              // Contenido según modo
-              if (_modeIndex == 0) ...[
-                const Text(
-                  'Elige tu perfil para entrar con 1 toque:',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 10),
-                ..._profiles.map((p) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(22),
-                      onTap: _loading ? null : () => _loginQuick(p.id),
-                      child: Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceContainer,
-                          borderRadius: BorderRadius.circular(22),
-                          border: Border.all(
-                            color: coralBg.withValues(alpha: 0.45),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 22,
-                              backgroundColor: coralBg,
-                              child: Text(
-                                p.username.isNotEmpty
-                                    ? p.username[0].toUpperCase()
-                                    : 'A',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  color: coralInk,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Entrar como @${p.username}',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Apodo que te dio tu pareja: "${p.partnerNickname}" · Tus tarjetas dirán YO',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Icon(Icons.arrow_forward_rounded, color: coralBg),
-                          ],
+                  ] else if (_step == 1) ...[
+                    // Paso 1 de Registro: Solo el logo más pequeño en la parte superior (sin mensaje de bienvenida)
+                    Center(
+                      child: Text(
+                        'amodoro',
+                        style: AmodoroTheme.logoStyle(
+                          fontSize: 28,
+                          isDark: isDark,
                         ),
                       ),
                     ),
-                  );
-                }),
-              ] else if (_modeIndex == 1) ...[
-                TextField(
-                  controller: _usernameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Usuario (ej. drehk o pareja)',
-                    prefixIcon: Icon(Icons.person_outline_rounded),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Contraseña (por defecto: amodoro2025)',
-                    prefixIcon: Icon(Icons.lock_outline_rounded),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: coralBg,
-                    foregroundColor: coralInk,
-                    minimumSize: const Size.fromHeight(52),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
+                    const SizedBox(height: 24),
+                    _buildGlassPanel(
+                      cardSurface: cardSurface,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_error != null) _buildErrorBanner(_error!),
+                          Center(
+                            child: FlatAvatarBadge(
+                              avatarId: _selectedAvatarId,
+                              size: 86,
+                              showPerspectiveBorder: true,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          FlatAvatarSelector(
+                            selectedAvatarId: _selectedAvatarId,
+                            onSelect: _onSelectRegisterAvatar,
+                          ),
+                          const SizedBox(height: 20),
+                          _buildPerspectiveField(
+                            controller: _registerNameCtrl,
+                            hint: 'Tu nombre',
+                            icon: Symbols.badge,
+                            isDark: isDark,
+                          ),
+                          const SizedBox(height: 12),
+                          _buildPerspectiveField(
+                            controller: _registerPassCtrl,
+                            hint: 'Contraseña (opcional)',
+                            icon: Symbols.key,
+                            obscure: true,
+                            isDark: isDark,
+                          ),
+                          const SizedBox(height: 20),
+                          _buildPerspectiveButton(
+                            label: _loading ? 'GUARDANDO...' : 'CONTINUAR',
+                            bgColor: coralBg,
+                            inkColor: coralInk,
+                            onTap: _loading ? null : _submitRegister,
+                          ),
+                          const SizedBox(height: 12),
+                          _buildPerspectiveButton(
+                            label: 'VOLVER',
+                            bgColor: isDark
+                                ? const Color(0xFF282F2B)
+                                : const Color(0xFFFCF9F5),
+                            inkColor: Theme.of(context).colorScheme.onSurface,
+                            onTap: () {
+                              setState(() {
+                                _error = null;
+                                _step = 0;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  onPressed: _loading ? null : _loginPassword,
-                  icon: const Icon(Icons.login_rounded),
-                  label: Text(
-                    _loading ? 'Entrando...' : 'Iniciar Sesión',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ] else ...[
-                TextField(
-                  controller: _codeController,
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(
-                    labelText: 'Código de invitación (ej. K7M2-9QXP)',
-                    prefixIcon: Icon(Icons.vpn_key_outlined),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: coralBg,
-                    foregroundColor: coralInk,
-                    minimumSize: const Size.fromHeight(52),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
+                  ] else ...[
+                    // Paso 2: Pantalla de Bienvenida con Código de Emparejamiento
+                    Center(
+                      child: Text(
+                        'amodoro',
+                        style: AmodoroTheme.logoStyle(
+                          fontSize: 38,
+                          isDark: isDark,
+                        ),
+                      ),
                     ),
-                  ),
-                  onPressed: _loading ? null : _loginCode,
-                  icon: const Icon(Icons.favorite_rounded),
-                  label: Text(
-                    _loading ? 'Verificando...' : 'Canjear Código y Entrar',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ],
-            ],
+                    const SizedBox(height: 10),
+                    Text(
+                      'Conecta con tu pareja usando su código de invitación o comparte el tuyo.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    _buildGlassPanel(
+                      cardSurface: cardSurface,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_error != null) _buildErrorBanner(_error!),
+                          _buildPerspectiveField(
+                            controller: _pairCodeCtrl,
+                            hint: 'CÓDIGO DE PAREJA (EJ. K7M2-9QXP)',
+                            icon: Symbols.link,
+                            isDark: isDark,
+                            uppercase: true,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildPerspectiveButton(
+                            label: _loading
+                                ? 'VINCULANDO...'
+                                : 'VINCULAR CON CÓDIGO',
+                            bgColor: coralBg,
+                            inkColor: coralInk,
+                            onTap: _loading ? null : _submitPairCode,
+                          ),
+                          const SizedBox(height: 14),
+                          _buildPerspectiveButton(
+                            label: 'GENERAR MI CÓDIGO DE INVITACIÓN',
+                            bgColor: isDark
+                                ? const Color(0xFF282F2B)
+                                : const Color(0xFFFCF9F5),
+                            inkColor: Theme.of(context).colorScheme.onSurface,
+                            onTap: _generateMyPairCode,
+                          ),
+                          if (_myInviteCode != null) ...[
+                            const SizedBox(height: 14),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                              decoration:
+                                  AmodoroTheme.floatingPerspectiveBox(
+                                color: const Color(0xFFFFDAD6),
+                                radius: 18,
+                                thickness: 2.5,
+                              ),
+                              child: Center(
+                                child: SelectableText(
+                                  _myInviteCode!,
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    letterSpacing: 2.5,
+                                    color: Color(0xFF1F1B18),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 14),
+                          _buildPerspectiveButton(
+                            label: 'CONTINUAR A HOME',
+                            bgColor: isDark
+                                ? const Color(0xFF1F2421)
+                                : const Color(0xFFE6E1D6),
+                            inkColor: Theme.of(context).colorScheme.onSurface,
+                            onTap: widget.onLoggedIn,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildModeTab(int index, String label, Color coralBg, Color coralInk) {
-    final active = _modeIndex == index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _modeIndex = index),
+  Widget _buildGlassPanel({
+    required Color cardSurface,
+    required Widget child,
+  }) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: active ? coralBg : Colors.transparent,
-            borderRadius: BorderRadius.circular(999),
+          padding: const EdgeInsets.all(22),
+          decoration: AmodoroTheme.floatingPerspectiveBox(
+            color: cardSurface,
+            radius: 28,
+            thickness: 2.5,
           ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: active
-                    ? coralInk
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPerspectiveField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    required bool isDark,
+    bool obscure = false,
+    bool uppercase = false,
+  }) {
+    final bg = isDark ? const Color(0xFF151816) : const Color(0xFFFCF9F5);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+      decoration: AmodoroTheme.floatingPerspectiveBox(
+        color: bg,
+        radius: 18,
+        thickness: 2.5,
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: obscure,
+        textCapitalization: uppercase
+            ? TextCapitalization.characters
+            : TextCapitalization.none,
+        decoration: InputDecoration(
+          border: InputBorder.none,
+          hintText: hint,
+          icon: AmodoroTheme.sysIcon(icon, size: 20),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPerspectiveButton({
+    required String label,
+    required Color bgColor,
+    required Color inkColor,
+    required VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 48,
+        decoration: AmodoroTheme.floatingPerspectiveBox(
+          color: bgColor,
+          radius: 999,
+          thickness: 2.5,
+        ),
+        child: Center(
+          child: Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 12.5,
+              letterSpacing: 1.5,
+              color: inkColor,
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: AmodoroTheme.floatingPerspectiveBox(
+          color: const Color(0xFFFFDAD6),
+          radius: 16,
+          thickness: 2.0,
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 12.5,
+            color: Color(0xFF3B0D09),
+          ),
+          textAlign: TextAlign.center,
         ),
       ),
     );

@@ -5,10 +5,9 @@ import '../models/amodoro_models.dart';
 
 class AmodoroApiClient {
   static const String defaultBaseUrl = 'http://68.211.73.23';
-  static const String _prefBaseUrl = 'amodoro_base_url';
   static const String _prefToken = 'amodoro_session_token';
 
-  String _baseUrl = defaultBaseUrl;
+  final String _baseUrl = defaultBaseUrl;
   String? _token;
 
   String get baseUrl => _baseUrl;
@@ -17,19 +16,7 @@ class AmodoroApiClient {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final savedUrl = prefs.getString(_prefBaseUrl);
-    if (savedUrl != null && savedUrl.trim().isNotEmpty) {
-      _baseUrl = savedUrl.trim().replaceAll(RegExp(r'/+$'), '');
-    }
     _token = prefs.getString(_prefToken);
-  }
-
-  Future<void> setBaseUrl(String url) async {
-    final clean = url.trim().replaceAll(RegExp(r'/+$'), '');
-    if (clean.isEmpty) return;
-    _baseUrl = clean;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefBaseUrl, _baseUrl);
   }
 
   Future<void> setToken(String? token) async {
@@ -65,22 +52,10 @@ class AmodoroApiClient {
     return '$_baseUrl$mediaUrl';
   }
 
-  Future<List<AuthProfileOption>> fetchAuthProfiles() async {
-    final res = await http
-        .get(Uri.parse('$_baseUrl/api/v1/auth'), headers: _headers())
-        .timeout(const Duration(seconds: 12));
-    final body = jsonDecode(res.body) as Map<String, dynamic>;
-    final raw = body['profiles'];
-    if (raw is List) {
-      return raw
-          .whereType<Map<String, dynamic>>()
-          .map(AuthProfileOption.fromJson)
-          .toList();
-    }
-    return const [];
-  }
-
-  Future<void> loginPassword(String username, String password) async {
+  Future<Map<String, dynamic>> loginPassword(
+    String username,
+    String password,
+  ) async {
     final res = await http
         .post(
           Uri.parse('$_baseUrl/api/v1/auth'),
@@ -97,42 +72,55 @@ class AmodoroApiClient {
       throw Exception(body['error'] ?? 'Credenciales inválidas');
     }
     await setToken(body['token']?.toString());
+    return body;
   }
 
-  Future<void> loginInviteCode(String code) async {
+  Future<Map<String, dynamic>> registerAccount({
+    required String displayName,
+    required String avatarId,
+    required String password,
+    String? username,
+  }) async {
     final res = await http
         .post(
           Uri.parse('$_baseUrl/api/v1/auth'),
           headers: _headers(),
           body: jsonEncode({
-            'mode': 'code',
+            'mode': 'register',
+            'displayName': displayName.trim(),
+            'username': (username ?? displayName).trim(),
+            'avatarId': avatarId,
+            'password': password.trim().isEmpty ? 'amodoro2025' : password,
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode >= 400 || body['ok'] != true) {
+      throw Exception(body['error'] ?? 'No se pudo completar el registro');
+    }
+    await setToken(body['token']?.toString());
+    return body;
+  }
+
+  Future<Map<String, dynamic>> pairWithCode(String code) async {
+    final res = await http
+        .post(
+          Uri.parse('$_baseUrl/api/v1/auth'),
+          headers: _headers(),
+          body: jsonEncode({
+            'mode': isAuthenticated ? 'pair' : 'code',
             'code': code.trim().toUpperCase(),
           }),
         )
         .timeout(const Duration(seconds: 15));
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode >= 400 || body['ok'] != true) {
-      throw Exception(body['error'] ?? 'Código inválido');
+      throw Exception(body['error'] ?? 'Código de emparejamiento inválido');
     }
-    await setToken(body['token']?.toString());
-  }
-
-  Future<void> loginQuick(int userId) async {
-    final res = await http
-        .post(
-          Uri.parse('$_baseUrl/api/v1/auth'),
-          headers: _headers(),
-          body: jsonEncode({
-            'mode': 'quick',
-            'userId': userId,
-          }),
-        )
-        .timeout(const Duration(seconds: 15));
-    final body = jsonDecode(res.body) as Map<String, dynamic>;
-    if (res.statusCode >= 400 || body['ok'] != true) {
-      throw Exception(body['error'] ?? 'No se pudo iniciar sesión');
+    if (body['token'] != null) {
+      await setToken(body['token']?.toString());
     }
-    await setToken(body['token']?.toString());
+    return body;
   }
 
   Future<SyncPayload> fetchSync() async {
@@ -142,12 +130,32 @@ class AmodoroApiClient {
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode == 401) {
       await logout();
-      throw Exception('Sesión expirada. Vuelve a iniciar sesión.');
+      throw Exception('Sesión expirada.');
     }
     if (res.statusCode >= 400 || body['ok'] != true) {
-      throw Exception(body['error'] ?? 'Error al sincronizar con el servidor');
+      throw Exception(body['error'] ?? 'Error al sincronizar');
     }
     return SyncPayload.fromJson(body);
+  }
+
+  Future<LinkPreviewModel> fetchLinkPreview(String url) async {
+    final res = await http
+        .post(
+          Uri.parse('$_baseUrl/api/v1/link-preview'),
+          headers: _headers(),
+          body: jsonEncode({'url': url.trim()}),
+        )
+        .timeout(const Duration(seconds: 10));
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode >= 400 || body['ok'] != true) {
+      return LinkPreviewModel(
+        url: url.trim(),
+        title: url.trim(),
+        platform: 'Web',
+      );
+    }
+    final previewMap = (body['preview'] as Map<String, dynamic>?) ?? {};
+    return LinkPreviewModel.fromJson(previewMap);
   }
 
   Future<void> createHomeCard({
@@ -155,8 +163,13 @@ class AmodoroApiClient {
     required String bgColor,
     required String fontFamily,
     required String fontSize,
+    required int fontSizePx,
     required String mediaType,
     String? mediaDataUrl,
+    String? linkUrl,
+    String? linkTitle,
+    String? linkThumbnail,
+    String? linkPlatform,
   }) async {
     final res = await http
         .post(
@@ -164,15 +177,23 @@ class AmodoroApiClient {
           headers: _headers(),
           body: jsonEncode({
             'action': 'create_card',
+            'body': textContent,
             'textContent': textContent,
             'bgColor': bgColor,
             'fontFamily': fontFamily,
             'fontSize': fontSize,
+            'fontSizePx': fontSizePx,
             'mediaType': mediaType,
+            'imageBase64': mediaDataUrl ?? '',
             'mediaDataUrl': mediaDataUrl ?? '',
+            'mediaKind': mediaType == 'drawing' ? 'drawing' : 'image',
+            'linkUrl': linkUrl ?? '',
+            'linkTitle': linkTitle ?? '',
+            'linkThumbnail': linkThumbnail ?? '',
+            'linkPlatform': linkPlatform ?? '',
           }),
         )
-        .timeout(const Duration(seconds: 20));
+        .timeout(const Duration(seconds: 25));
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode >= 400 || body['ok'] != true) {
       throw Exception(body['error'] ?? 'Error al enviar tarjeta');
@@ -205,6 +226,7 @@ class AmodoroApiClient {
   Future<void> createBoard({
     required String title,
     required String icon,
+    String bgColor = '#F4EFE8',
   }) async {
     final res = await http
         .post(
@@ -214,6 +236,7 @@ class AmodoroApiClient {
             'action': 'create_board',
             'title': title,
             'icon': icon,
+            'bgColor': bgColor,
           }),
         )
         .timeout(const Duration(seconds: 15));
@@ -223,12 +246,57 @@ class AmodoroApiClient {
     }
   }
 
+  Future<void> updateBoard({
+    required String boardId,
+    String? title,
+    String? icon,
+    String? bgColor,
+  }) async {
+    final res = await http
+        .post(
+          Uri.parse('$_baseUrl/api/v1/boards'),
+          headers: _headers(),
+          body: jsonEncode({
+            'action': 'update_board',
+            'boardId': boardId,
+            'title': title,
+            'icon': icon,
+            'bgColor': bgColor,
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode >= 400 || body['ok'] != true) {
+      throw Exception(body['error'] ?? 'Error al editar tablero');
+    }
+  }
+
+  Future<void> deleteBoard(String boardId) async {
+    final res = await http
+        .post(
+          Uri.parse('$_baseUrl/api/v1/boards'),
+          headers: _headers(),
+          body: jsonEncode({
+            'action': 'delete_board',
+            'boardId': boardId,
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode >= 400 || body['ok'] != true) {
+      throw Exception(body['error'] ?? 'Error al eliminar tablero');
+    }
+  }
+
   Future<void> addBoardItem({
     required String boardId,
     required String title,
     String notes = '',
-    String emoji = '✨',
+    String categoryTag = '',
+    String emoji = '',
     String bgColor = '#FFDAD6',
+    String? mediaDataUrl,
+    String? linkUrl,
   }) async {
     final res = await http
         .post(
@@ -239,14 +307,48 @@ class AmodoroApiClient {
             'boardId': boardId,
             'title': title,
             'notes': notes,
+            'categoryTag': categoryTag,
             'emoji': emoji,
             'bgColor': bgColor,
+            'imageBase64': mediaDataUrl ?? '',
+            'linkUrl': linkUrl ?? '',
+          }),
+        )
+        .timeout(const Duration(seconds: 20));
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode >= 400 || body['ok'] != true) {
+      throw Exception(body['error'] ?? 'Error al agregar elemento');
+    }
+  }
+
+  Future<void> updateBoardItem({
+    required String itemId,
+    String? title,
+    String? notes,
+    String? categoryTag,
+    String? bgColor,
+    String? emoji,
+    String? linkUrl,
+  }) async {
+    final res = await http
+        .post(
+          Uri.parse('$_baseUrl/api/v1/boards'),
+          headers: _headers(),
+          body: jsonEncode({
+            'action': 'update_item',
+            'itemId': itemId,
+            'title': title,
+            'notes': notes,
+            'categoryTag': categoryTag,
+            'bgColor': bgColor,
+            'emoji': emoji,
+            'linkUrl': linkUrl,
           }),
         )
         .timeout(const Duration(seconds: 15));
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode >= 400 || body['ok'] != true) {
-      throw Exception(body['error'] ?? 'Error al agregar ítem');
+      throw Exception(body['error'] ?? 'Error al actualizar elemento');
     }
   }
 
@@ -263,24 +365,24 @@ class AmodoroApiClient {
         .timeout(const Duration(seconds: 15));
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode >= 400 || body['ok'] != true) {
-      throw Exception(body['error'] ?? 'Error al copiar a Actividades');
+      throw Exception(body['error'] ?? 'Error al pasar a Pendientes');
     }
   }
 
-  Future<void> completeItem(String itemId) async {
+  Future<void> deleteOrCompleteItem(String itemId) async {
     final res = await http
         .post(
           Uri.parse('$_baseUrl/api/v1/boards'),
           headers: _headers(),
           body: jsonEncode({
-            'action': 'complete_item',
+            'action': 'delete_item',
             'itemId': itemId,
           }),
         )
         .timeout(const Duration(seconds: 15));
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode >= 400 || body['ok'] != true) {
-      throw Exception(body['error'] ?? 'Error al completar actividad');
+      throw Exception(body['error'] ?? 'Error al eliminar elemento');
     }
   }
 
@@ -337,6 +439,8 @@ class AmodoroApiClient {
   }
 
   Future<void> updateSettings({
+    String? displayName,
+    String? avatarId,
     required String partnerNickname,
     required String themeMode,
     required String accentPalette,
@@ -348,6 +452,8 @@ class AmodoroApiClient {
           headers: _headers(),
           body: jsonEncode({
             'action': 'update_settings',
+            'displayName': displayName,
+            'avatarId': avatarId,
             'partnerNickname': partnerNickname,
             'themeMode': themeMode,
             'accentPalette': accentPalette,

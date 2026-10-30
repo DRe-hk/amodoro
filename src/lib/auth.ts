@@ -14,6 +14,7 @@ import {
   sessions,
   users,
   type AccentPalette,
+  type AvatarId,
   type ThemeMode,
 } from "@/db/schema";
 
@@ -43,19 +44,21 @@ let seededChecked = false;
 export function ensureInitialSeed() {
   if (seededChecked) return;
   const existingUsers = db.select().from(users).all();
-  if (existingUsers.length === 0) {
-    const now = new Date();
-    const yesterday = new Date(now.getTime() - 86_400_000);
-    const twoDaysAgo = new Date(now.getTime() - 2 * 86_400_000);
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 86_400_000);
+  const twoDaysAgo = new Date(now.getTime() - 2 * 86_400_000);
 
-    // Pre-computed argon2 hash or deterministic initial password hash
-    const defaultHash = "$argon2id$v=19$m=19456,t=2,p=1$amodoroSalt123456$5T6K4R8vN3mP9qL2wX7zB1cV4nM8kH5jG2fD9sA3eW0";
+  if (existingUsers.length === 0) {
+    const defaultHash =
+      "$argon2id$v=19$m=19456,t=2,p=1$amodoroSalt123456$5T6K4R8vN3mP9qL2wX7zB1cV4nM8kH5jG2fD9sA3eW0";
 
     const userA = db
       .insert(users)
       .values({
         username: "drehk",
         passwordHash: defaultHash,
+        displayName: "Drehk",
+        avatarId: "cat",
         nicknameByPartner: "Rey",
         themeMode: "light",
         accentPalette: "fig-sage",
@@ -69,6 +72,9 @@ export function ensureInitialSeed() {
       .values({
         username: "pareja",
         passwordHash: defaultHash,
+        displayName: "Alina",
+        avatarId: "rabbit",
+        partnerId: userA.id,
         nicknameByPartner: "Cielo",
         themeMode: "light",
         accentPalette: "fig-sage",
@@ -77,13 +83,20 @@ export function ensureInitialSeed() {
       .returning()
       .get();
 
-    // Seed the 3 system boards: Actividades (Pendientes), Música, Pelis
+    db.update(users)
+      .set({ partnerId: userB.id })
+      .where(eq(users.id, userA.id))
+      .run();
+
+    // Seed the predefined system boards matching the sketch:
+    // PENDIENTES (slug: actividades), MÚSICA, PELIS, SERIES, JUEGOS
     const actBoard = db
       .insert(boards)
       .values({
         slug: "actividades",
-        title: "Actividades",
-        icon: "clock",
+        title: "PENDIENTES",
+        icon: "schedule",
+        bgColor: "#F4EFE8",
         isSystem: true,
         createdBy: userA.id,
         createdAt: twoDaysAgo,
@@ -95,8 +108,9 @@ export function ensureInitialSeed() {
       .insert(boards)
       .values({
         slug: "musica",
-        title: "Música",
-        icon: "disc",
+        title: "MÚSICA",
+        icon: "album",
+        bgColor: "#E8DEF8",
         isSystem: true,
         createdBy: userA.id,
         createdAt: twoDaysAgo,
@@ -108,8 +122,9 @@ export function ensureInitialSeed() {
       .insert(boards)
       .values({
         slug: "pelis",
-        title: "Pelis",
-        icon: "film",
+        title: "PELIS",
+        icon: "movie",
+        bgColor: "#FFDAD6",
         isSystem: true,
         createdBy: userA.id,
         createdAt: twoDaysAgo,
@@ -117,88 +132,109 @@ export function ensureInitialSeed() {
       .returning()
       .get();
 
-    // Seed initial items matching the sketch ("VER SNOOPY", "JUGAR MINECRAFT 😊😐", "JUGAR POKEMON", "VER WANDAVISION")
+    const seriesBoard = db
+      .insert(boards)
+      .values({
+        slug: "series",
+        title: "SERIES",
+        icon: "tv",
+        bgColor: "#D3E4FF",
+        isSystem: true,
+        createdBy: userA.id,
+        createdAt: twoDaysAgo,
+      })
+      .returning()
+      .get();
+
+    const gamesBoard = db
+      .insert(boards)
+      .values({
+        slug: "juegos",
+        title: "JUEGOS",
+        icon: "sports_esports",
+        bgColor: "#C8E6C9",
+        isSystem: true,
+        createdBy: userA.id,
+        createdAt: twoDaysAgo,
+      })
+      .returning()
+      .get();
+
+    // Seed initial items matching the sketch ("VER SNOOPY", "JUGAR MINECRAFT", "JUGAR POKEMON", "VER WANDAVISION")
     db.insert(boardItems)
       .values([
         {
           boardId: actBoard.id,
           categoryTag: "PELÍCULAS",
-          title: "Ver Snoopy 🐾",
+          title: "VER SNOOPY",
           notes: "Con mantita y palomitas esta noche",
-          emoji: "🐶",
+          bgColor: "#FFDAD6",
           addedBy: userB.id,
           createdAt: twoDaysAgo,
         },
         {
           boardId: actBoard.id,
           categoryTag: "JUEGO",
-          title: "Jugar Minecraft 😊 😐",
+          title: "JUGAR MINECRAFT",
           notes: "Terminar nuestra cabaña junto al lago",
-          emoji: "⛏️",
+          bgColor: "#C8E6C9",
           addedBy: userA.id,
           createdAt: twoDaysAgo,
         },
         {
           boardId: actBoard.id,
           categoryTag: "JUEGO",
-          title: "Jugar Pokémon 🎮",
+          title: "JUGAR POKÉMON",
           notes: "Combate amistoso o ruta cooperativa",
-          emoji: "⚡",
+          bgColor: "#F5E0B5",
           addedBy: userA.id,
           createdAt: yesterday,
         },
         {
           boardId: actBoard.id,
           categoryTag: "SERIE",
-          title: "Ver WandaVision 📺",
-          notes: "Dos episodios seguidos en llamada",
-          emoji: "✨",
+          title: "VER WANDAVISION",
+          notes: "Dos episodios seguidos juntos",
+          bgColor: "#E8DEF8",
           addedBy: userB.id,
           createdAt: yesterday,
         },
         {
-          boardId: actBoard.id,
-          categoryTag: "ACTIVIDAD",
-          title: "Cocinar algo rico por videollamada 🍝",
-          notes: "Hacer la misma receta a la vez",
-          emoji: "🍷",
-          addedBy: userB.id,
-          createdAt: now,
-        },
-        {
           boardId: musicBoard.id,
-          categoryTag: "CANCIÓN",
-          title: "Lover, You Should've Come Over 🎵",
+          categoryTag: "MÚSICA",
+          title: "Lover, You Should've Come Over",
           notes: "Escúchala antes de dormir",
-          url: "https://open.spotify.com",
-          emoji: "🎧",
+          url: "https://open.spotify.com/track/6Jv7kjGkhY2fT4yuBF3aTz",
+          linkTitle: "Lover, You Should've Come Over — Jeff Buckley",
+          linkPlatform: "Spotify",
+          bgColor: "#E8DEF8",
           addedBy: userB.id,
           createdAt: yesterday,
         },
         {
-          boardId: musicBoard.id,
-          categoryTag: "ÁLBUM",
-          title: "In Rainbows — Radiohead 🌈",
-          notes: "Para escuchar juntos el domingo",
-          emoji: "💿",
+          boardId: moviesBoard.id,
+          categoryTag: "PELÍCULAS",
+          title: "Before Sunrise",
+          notes: "Clásico pendiente para el finde",
+          bgColor: "#FFDAD6",
+          addedBy: userB.id,
+          createdAt: yesterday,
+        },
+        {
+          boardId: seriesBoard.id,
+          categoryTag: "SERIE",
+          title: "The Bear",
+          notes: "Empezar primera temporada",
+          bgColor: "#D3E4FF",
           addedBy: userA.id,
           createdAt: now,
         },
         {
-          boardId: moviesBoard.id,
-          categoryTag: "PELÍCULA",
-          title: "Before Sunrise (Antes del amanecer) 🌅",
-          notes: "Clásico pendiente para el finde",
-          emoji: "🎬",
-          addedBy: userB.id,
-          createdAt: yesterday,
-        },
-        {
-          boardId: moviesBoard.id,
-          categoryTag: "ANIME",
-          title: "El viaje de Chihiro 🐉",
-          notes: "Maratón Studio Ghibli",
-          emoji: "🍵",
+          boardId: gamesBoard.id,
+          categoryTag: "JUEGO",
+          title: "It Takes Two",
+          notes: "Cooperativo en pareja",
+          bgColor: "#C8E6C9",
           addedBy: userA.id,
           createdAt: now,
         },
@@ -210,10 +246,12 @@ export function ensureInitialSeed() {
       .insert(homeCards)
       .values({
         authorId: userB.id,
-        body: "Estuve pensando en nuestra próxima cita y en las ganas que tengo de abrazarte fuerte. Que tengas un domingo precioso 🌿✨",
-        bgColor: "#D8F3DC",
+        mediaType: "none",
+        body: "Estuve pensando en nuestra próxima cita y en las ganas que tengo de abrazarte fuerte. Que tengas un domingo precioso",
+        bgColor: "#C8E6C9",
         fontFamily: "serif",
         fontSize: "md",
+        fontSizePx: 18,
         createdAt: yesterday,
       })
       .returning()
@@ -224,7 +262,7 @@ export function ensureInitialSeed() {
         cardId: cardYesterday.id,
         userId: userA.id,
         emoji: "❤️",
-        presetText: "Me alegraste el día ✨",
+        presetText: "Me alegraste el día",
         createdAt: yesterday,
       })
       .run();
@@ -232,10 +270,12 @@ export function ensureInitialSeed() {
     db.insert(homeCards)
       .values({
         authorId: userB.id,
-        body: "Buenos días mi vida ☀️ Hoy va a ser un gran día, acuérdate de tomar un respiro y que aquí te espero esta noche para decidir qué vemos juntos ❤️",
-        bgColor: "#FADADD",
+        mediaType: "none",
+        body: "Buenos días mi vida. Hoy va a ser un gran día, acuérdate de tomar un respiro y que aquí te espero esta noche para decidir qué hacemos juntos",
+        bgColor: "#FFDAD6",
         fontFamily: "sans",
         fontSize: "lg",
+        fontSizePx: 22,
         createdAt: now,
       })
       .run();
@@ -244,10 +284,12 @@ export function ensureInitialSeed() {
       .insert(homeCards)
       .values({
         authorId: userA.id,
-        body: "Te dejé anotadas un par de ideas nuevas en el tablero para esta noche 🎮🍿 ¡Te quiero muchísimo!",
-        bgColor: "#FFF1CC",
+        mediaType: "none",
+        body: "Te dejé anotadas un par de ideas nuevas en el tablero de pendientes para esta noche",
+        bgColor: "#F5E0B5",
         fontFamily: "hand",
         fontSize: "lg",
+        fontSizePx: 22,
         createdAt: yesterday,
       })
       .returning()
@@ -258,11 +300,67 @@ export function ensureInitialSeed() {
         cardId: sentByA.id,
         userId: userB.id,
         emoji: "🥰",
-        presetText: "Te amo ❤️",
+        presetText: "Te amo",
         createdAt: yesterday,
       })
       .run();
+  } else {
+    // Ensure existing DB has the 5 predefined boards and paired seed users
+    const user1 = existingUsers.find((u) => u.id === 1);
+    const user2 = existingUsers.find((u) => u.id === 2);
+    if (user1 && user2 && (!user1.partnerId || !user2.partnerId)) {
+      db.update(users)
+        .set({
+          partnerId: user2.id,
+          displayName: user1.displayName || "Drehk",
+          avatarId: user1.avatarId || "cat",
+        })
+        .where(eq(users.id, user1.id))
+        .run();
+      db.update(users)
+        .set({
+          partnerId: user1.id,
+          displayName: user2.displayName || "Alina",
+          avatarId: user2.avatarId || "rabbit",
+        })
+        .where(eq(users.id, user2.id))
+        .run();
+    }
+
+    const allBoards = db.select().from(boards).all();
+    const act = allBoards.find((b) => b.slug === "actividades");
+    if (act && act.title !== "PENDIENTES") {
+      db.update(boards)
+        .set({ title: "PENDIENTES", icon: "schedule" })
+        .where(eq(boards.id, act.id))
+        .run();
+    }
+    const ensureBoard = (
+      slug: string,
+      title: string,
+      icon: string,
+      bgColor: string,
+    ) => {
+      if (!allBoards.some((b) => b.slug === slug)) {
+        db.insert(boards)
+          .values({
+            slug,
+            title,
+            icon,
+            bgColor,
+            isSystem: true,
+            createdBy: existingUsers[0]?.id ?? null,
+            createdAt: now,
+          })
+          .run();
+      }
+    };
+    ensureBoard("musica", "MÚSICA", "album", "#E8DEF8");
+    ensureBoard("pelis", "PELIS", "movie", "#FFDAD6");
+    ensureBoard("series", "SERIES", "tv", "#D3E4FF");
+    ensureBoard("juegos", "JUEGOS", "sports_esports", "#C8E6C9");
   }
+
   seededChecked = true;
 }
 
@@ -290,7 +388,6 @@ export async function createSessionForUser(
   const now = new Date();
   const expires = new Date(now.getTime() + SESSION_DAYS * 86_400_000);
 
-  // Keep up to 3 most recent sessions per user so phone + laptop work together
   const existing = db
     .select()
     .from(sessions)
@@ -298,8 +395,8 @@ export async function createSessionForUser(
     .orderBy(desc(sessions.lastSeenAt))
     .all();
 
-  if (existing.length >= 3) {
-    for (const old of existing.slice(2)) {
+  if (existing.length >= 5) {
+    for (const old of existing.slice(4)) {
       db.delete(sessions).where(eq(sessions.id, old.id)).run();
     }
   }
@@ -316,14 +413,18 @@ export async function createSessionForUser(
     })
     .run();
 
-  const store = await cookies();
-  store.set(SESSION_COOKIE, id, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: cookieIsSecure(),
-    path: "/",
-    expires,
-  });
+  try {
+    const store = await cookies();
+    store.set(SESSION_COOKIE, id, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: cookieIsSecure(),
+      path: "/",
+      expires,
+    });
+  } catch {
+    // Ignore when called outside Next.js cookie context
+  }
 
   return { id, expires };
 }
@@ -356,7 +457,6 @@ export const currentUser = cache(async () => {
     return null;
   }
 
-  // Sliding session renewal in DB
   const nowSec = Math.floor(Date.now() / 1000);
   const newExpiresSec = nowSec + SESSION_DAYS * 86_400;
   db.update(sessions)
@@ -386,7 +486,63 @@ export function getAllUsers() {
 export function getPartnerUser(myUserId: number) {
   ensureInitialSeed();
   const all = getAllUsers();
-  return all.find((u) => u.id !== myUserId) ?? null;
+  const me = all.find((u) => u.id === myUserId);
+  if (me?.partnerId) {
+    const linked = all.find((u) => u.id === me.partnerId);
+    if (linked) return linked;
+  }
+  // Fallback for initial 2-user seed
+  if (myUserId === 1 || myUserId === 2) {
+    return all.find((u) => u.id !== myUserId && (u.id === 1 || u.id === 2)) ?? null;
+  }
+  return null;
+}
+
+export async function registerNewUser(input: {
+  username?: string;
+  displayName: string;
+  password?: string;
+  avatarId?: AvatarId;
+}) {
+  ensureInitialSeed();
+  const cleanName = input.displayName.trim();
+  if (!cleanName) {
+    throw new Error("Elige un nombre para continuar.");
+  }
+
+  const rawUsername = (input.username?.trim() || cleanName)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9_]/g, "");
+
+  const baseUsername = rawUsername || `user_${Date.now().toString(36)}`;
+  let finalUsername = baseUsername;
+  const existing = getAllUsers();
+  if (existing.some((u) => u.username.toLowerCase() === finalUsername)) {
+    finalUsername = `${baseUsername}_${Math.floor(100 + Math.random() * 900)}`;
+  }
+
+  const pwd = input.password?.trim() || "amodoro2025";
+  const passwordHash = await hashPassword(pwd);
+
+  const created = db
+    .insert(users)
+    .values({
+      username: finalUsername,
+      passwordHash,
+      displayName: cleanName,
+      avatarId: input.avatarId || "cat",
+      partnerId: null,
+      nicknameByPartner: "",
+      themeMode: "light",
+      accentPalette: "fig-sage",
+      createdAt: new Date(),
+    })
+    .returning()
+    .get();
+
+  return created;
 }
 
 export function createInviteForUser(userId: number) {
@@ -417,9 +573,12 @@ export function createInviteForUser(userId: number) {
 export function redeemInviteByTokenOrCode(input: {
   token?: string;
   code?: string;
+  redeemingUserId?: number;
 }): number | null {
   ensureInitialSeed();
   const now = new Date();
+  let inviterUserId: number | null = null;
+  let tokenId: number | null = null;
 
   if (input.token) {
     const hashVal = sha256(input.token.trim());
@@ -434,42 +593,60 @@ export function redeemInviteByTokenOrCode(input: {
         ),
       )
       .get();
-    if (!row) return null;
-    db.update(inviteTokens)
-      .set({ usedAt: now })
-      .where(eq(inviteTokens.id, row.id))
-      .run();
-    return row.userId;
-  }
-
-  if (input.code) {
+    if (row) {
+      inviterUserId = row.userId;
+      tokenId = row.id;
+    }
+  } else if (input.code) {
     const clean = normalizeShortCode(input.code);
-    if (!clean) return null;
-    const hashVal = sha256(clean);
-    const row = db
-      .select()
-      .from(inviteTokens)
-      .where(
-        and(
-          eq(inviteTokens.codeHash, hashVal),
-          isNull(inviteTokens.usedAt),
-          gt(inviteTokens.expiresAt, now),
-        ),
-      )
-      .get();
-    if (!row) return null;
-    db.update(inviteTokens)
-      .set({ usedAt: now })
-      .where(eq(inviteTokens.id, row.id))
-      .run();
-    return row.userId;
+    if (clean) {
+      const hashVal = sha256(clean);
+      const row = db
+        .select()
+        .from(inviteTokens)
+        .where(
+          and(
+            eq(inviteTokens.codeHash, hashVal),
+            isNull(inviteTokens.usedAt),
+            gt(inviteTokens.expiresAt, now),
+          ),
+        )
+        .get();
+      if (row) {
+        inviterUserId = row.userId;
+        tokenId = row.id;
+      }
+    }
   }
 
-  return null;
+  if (!inviterUserId || !tokenId) return null;
+
+  db.update(inviteTokens)
+    .set({ usedAt: now })
+    .where(eq(inviteTokens.id, tokenId))
+    .run();
+
+  // If a logged-in/newly-registered user is redeeming their partner's code, pair both accounts!
+  if (input.redeemingUserId && input.redeemingUserId !== inviterUserId) {
+    db.update(users)
+      .set({ partnerId: inviterUserId })
+      .where(eq(users.id, input.redeemingUserId))
+      .run();
+    db.update(users)
+      .set({ partnerId: input.redeemingUserId })
+      .where(eq(users.id, inviterUserId))
+      .run();
+    return input.redeemingUserId;
+  }
+
+  const inviterPartner = getPartnerUser(inviterUserId);
+  return inviterPartner?.id ?? inviterUserId;
 }
 
 export function updateUserSettings(input: {
   userId: number;
+  displayName?: string;
+  avatarId?: AvatarId;
   partnerNickname?: string;
   themeMode?: ThemeMode;
   accentPalette?: AccentPalette;
@@ -478,7 +655,7 @@ export function updateUserSettings(input: {
   const partner = getPartnerUser(input.userId);
   if (partner && typeof input.partnerNickname === "string") {
     const cleanNick = input.partnerNickname.trim();
-    if (cleanNick.length > 0 && cleanNick.length <= 40) {
+    if (cleanNick.length <= 40) {
       db.update(users)
         .set({ nicknameByPartner: cleanNick })
         .where(eq(users.id, partner.id))
@@ -487,16 +664,23 @@ export function updateUserSettings(input: {
   }
 
   const updates: Partial<typeof users.$inferInsert> = {};
+  if (typeof input.displayName === "string") {
+    const cleanName = input.displayName.trim();
+    if (cleanName.length > 0 && cleanName.length <= 40) {
+      updates.displayName = cleanName;
+    }
+  }
+  if (input.avatarId) {
+    updates.avatarId = input.avatarId;
+  }
   if (input.themeMode) updates.themeMode = input.themeMode;
   if (input.accentPalette) updates.accentPalette = input.accentPalette;
   if (input.quickReplies) {
     const filtered = input.quickReplies
       .map((s) => s.trim())
       .filter((s) => s.length > 0 && s.length <= 80)
-      .slice(0, 12);
-    if (filtered.length > 0) {
-      updates.quickRepliesJson = JSON.stringify(filtered);
-    }
+      .slice(0, 20);
+    updates.quickRepliesJson = JSON.stringify(filtered);
   }
 
   if (Object.keys(updates).length > 0) {

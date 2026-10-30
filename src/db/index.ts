@@ -4,10 +4,24 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "./schema";
 
-const DB_PATH = resolve(/*turbopackIgnore: true*/ (process.env.DB_PATH ?? "./data/amodoro.db"));
+const DB_PATH = resolve(
+  /*turbopackIgnore: true*/ (process.env.DB_PATH ?? "./data/amodoro.db"),
+);
 
 declare global {
   var __amodoroDb: { sqlite: Database.Database } | undefined;
+}
+
+function safeAddColumn(
+  sqlite: Database.Database,
+  table: string,
+  columnDef: string,
+) {
+  try {
+    sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${columnDef};`);
+  } catch {
+    // Column already exists
+  }
 }
 
 function bootstrapSchema(sqlite: Database.Database) {
@@ -16,10 +30,13 @@ function bootstrapSchema(sqlite: Database.Database) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT NOT NULL,
       password_hash TEXT NOT NULL,
-      nickname_by_partner TEXT NOT NULL DEFAULT 'Amor',
+      display_name TEXT NOT NULL DEFAULT '',
+      avatar_id TEXT NOT NULL DEFAULT 'cat',
+      partner_id INTEGER,
+      nickname_by_partner TEXT NOT NULL DEFAULT '',
       theme_mode TEXT NOT NULL DEFAULT 'light',
       accent_palette TEXT NOT NULL DEFAULT 'fig-sage',
-      quick_replies_json TEXT NOT NULL DEFAULT '["Te amo ❤️","Me alegraste el día ✨","Qué bonito 🥺","Te extraño mucho 💌","Me sacaste una sonrisa 🥰"]',
+      quick_replies_json TEXT NOT NULL DEFAULT '["Te amo","Me alegraste el día","Qué bonito","Te extraño mucho","Me sacaste una sonrisa"]',
       created_at INTEGER NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS users_username_idx ON users(username);
@@ -63,10 +80,16 @@ function bootstrapSchema(sqlite: Database.Database) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       media_id INTEGER REFERENCES media(id) ON DELETE SET NULL,
+      media_type TEXT NOT NULL DEFAULT 'none',
+      link_url TEXT,
+      link_title TEXT,
+      link_thumbnail TEXT,
+      link_platform TEXT,
       body TEXT NOT NULL,
-      bg_color TEXT NOT NULL DEFAULT '#FADADD',
+      bg_color TEXT NOT NULL DEFAULT '#FFDAD6',
       font_family TEXT NOT NULL DEFAULT 'sans',
       font_size TEXT NOT NULL DEFAULT 'md',
+      font_size_px INTEGER NOT NULL DEFAULT 18,
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS home_cards_author_idx ON home_cards(author_id, created_at);
@@ -86,6 +109,7 @@ function bootstrapSchema(sqlite: Database.Database) {
       slug TEXT NOT NULL,
       title TEXT NOT NULL,
       icon TEXT NOT NULL DEFAULT 'sparkles',
+      bg_color TEXT NOT NULL DEFAULT '#F4EFE8',
       is_system INTEGER NOT NULL DEFAULT 0,
       created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at INTEGER NOT NULL
@@ -95,11 +119,15 @@ function bootstrapSchema(sqlite: Database.Database) {
     CREATE TABLE IF NOT EXISTS board_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
-      category_tag TEXT NOT NULL DEFAULT 'IDEA',
+      category_tag TEXT NOT NULL DEFAULT 'PENDIENTE',
       title TEXT NOT NULL,
       notes TEXT,
       url TEXT,
+      link_title TEXT,
+      link_thumbnail TEXT,
+      link_platform TEXT,
       emoji TEXT,
+      bg_color TEXT NOT NULL DEFAULT '#FFDAD6',
       media_id INTEGER REFERENCES media(id) ON DELETE SET NULL,
       added_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       completed_at INTEGER,
@@ -129,6 +157,38 @@ function bootstrapSchema(sqlite: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS decision_votes_session_round_idx ON decision_votes(session_id, round_number);
   `);
+
+  // Non-destructive migrations for existing SQLite databases
+  safeAddColumn(sqlite, "users", "display_name TEXT NOT NULL DEFAULT ''");
+  safeAddColumn(sqlite, "users", "avatar_id TEXT NOT NULL DEFAULT 'cat'");
+  safeAddColumn(sqlite, "users", "partner_id INTEGER");
+  safeAddColumn(
+    sqlite,
+    "home_cards",
+    "media_type TEXT NOT NULL DEFAULT 'none'",
+  );
+  safeAddColumn(sqlite, "home_cards", "link_url TEXT");
+  safeAddColumn(sqlite, "home_cards", "link_title TEXT");
+  safeAddColumn(sqlite, "home_cards", "link_thumbnail TEXT");
+  safeAddColumn(sqlite, "home_cards", "link_platform TEXT");
+  safeAddColumn(
+    sqlite,
+    "home_cards",
+    "font_size_px INTEGER NOT NULL DEFAULT 18",
+  );
+  safeAddColumn(
+    sqlite,
+    "boards",
+    "bg_color TEXT NOT NULL DEFAULT '#F4EFE8'",
+  );
+  safeAddColumn(sqlite, "board_items", "link_title TEXT");
+  safeAddColumn(sqlite, "board_items", "link_thumbnail TEXT");
+  safeAddColumn(sqlite, "board_items", "link_platform TEXT");
+  safeAddColumn(
+    sqlite,
+    "board_items",
+    "bg_color TEXT NOT NULL DEFAULT '#FFDAD6'",
+  );
 }
 
 function open(): Database.Database {

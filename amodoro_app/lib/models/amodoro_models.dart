@@ -1,21 +1,22 @@
-class AuthProfileOption {
-  final int id;
-  final String username;
-  final String partnerNickname;
+class LinkPreviewModel {
+  final String url;
+  final String title;
+  final String? thumbnail;
+  final String platform;
 
-  const AuthProfileOption({
-    required this.id,
-    required this.username,
-    required this.partnerNickname,
+  const LinkPreviewModel({
+    required this.url,
+    required this.title,
+    this.thumbnail,
+    required this.platform,
   });
 
-  factory AuthProfileOption.fromJson(Map<String, dynamic> json) {
-    return AuthProfileOption(
-      id: (json['id'] as num?)?.toInt() ?? 0,
-      username: (json['username'] ?? '').toString(),
-      partnerNickname:
-          (json['partnerNickname'] ?? json['nicknameByPartner'] ?? '')
-              .toString(),
+  factory LinkPreviewModel.fromJson(Map<String, dynamic> json) {
+    return LinkPreviewModel(
+      url: (json['url'] ?? '').toString(),
+      title: (json['title'] ?? 'Enlace').toString(),
+      thumbnail: json['thumbnail']?.toString(),
+      platform: (json['platform'] ?? 'Web').toString(),
     );
   }
 }
@@ -23,6 +24,9 @@ class AuthProfileOption {
 class UserProfile {
   final int id;
   final String username;
+  final String displayName;
+  final String avatarId;
+  final bool isPaired;
   final String nicknameByPartner;
   final String partnerNicknameGiven;
   final String themeMode;
@@ -32,6 +36,9 @@ class UserProfile {
   const UserProfile({
     required this.id,
     required this.username,
+    required this.displayName,
+    required this.avatarId,
+    required this.isPaired,
     required this.nicknameByPartner,
     required this.partnerNicknameGiven,
     required this.themeMode,
@@ -41,17 +48,24 @@ class UserProfile {
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     final rawReplies = json['quickReplies'];
+    final uname = (json['username'] ?? '').toString();
+    final dname = (json['displayName'] ?? '').toString().trim();
+    final nickByPartner = (json['nicknameByPartner'] ?? '').toString().trim();
     return UserProfile(
       id: (json['id'] as num?)?.toInt() ?? 0,
-      username: (json['username'] ?? '').toString(),
-      nicknameByPartner: (json['nicknameByPartner'] ?? 'Amor').toString(),
-      partnerNicknameGiven:
-          (json['partnerNicknameGiven'] ?? 'Mi Persona').toString(),
+      username: uname,
+      displayName: dname.isNotEmpty ? dname : uname,
+      avatarId: (json['avatarId'] ?? 'cat').toString(),
+      isPaired: json['isPaired'] == true,
+      nicknameByPartner: nickByPartner.isNotEmpty
+          ? nickByPartner
+          : (dname.isNotEmpty ? dname : uname),
+      partnerNicknameGiven: (json['partnerNicknameGiven'] ?? '').toString(),
       themeMode: (json['themeMode'] ?? 'light').toString(),
-      accentPalette: (json['accentPalette'] ?? 'sage_fig').toString(),
+      accentPalette: (json['accentPalette'] ?? 'fig-sage').toString(),
       quickReplies: rawReplies is List
           ? rawReplies.map((e) => e.toString()).toList()
-          : const ['Te amo ❤️', '¡Qué lindo! 🥰', '¡Sí, hagámoslo! ✨'],
+          : const ['Te amo', 'Me alegraste el día', 'Qué bonito'],
     );
   }
 }
@@ -59,19 +73,32 @@ class UserProfile {
 class PartnerProfile {
   final int id;
   final String username;
+  final String displayName;
+  final String avatarId;
   final String myGivenNickname;
 
   const PartnerProfile({
     required this.id,
     required this.username,
+    required this.displayName,
+    required this.avatarId,
     required this.myGivenNickname,
   });
 
   factory PartnerProfile.fromJson(Map<String, dynamic> json) {
+    final uname = (json['username'] ?? '').toString();
+    final dname = (json['displayName'] ?? '').toString().trim();
+    final nick =
+        (json['myGivenNickname'] ?? json['nicknameByPartner'] ?? '')
+            .toString()
+            .trim();
     return PartnerProfile(
       id: (json['id'] as num?)?.toInt() ?? 0,
-      username: (json['username'] ?? '').toString(),
-      myGivenNickname: (json['myGivenNickname'] ?? 'Tu Pareja').toString(),
+      username: uname,
+      displayName: dname.isNotEmpty ? dname : uname,
+      avatarId: (json['avatarId'] ?? 'rabbit').toString(),
+      myGivenNickname:
+          nick.isNotEmpty ? nick : (dname.isNotEmpty ? dname : uname),
     );
   }
 }
@@ -80,6 +107,7 @@ class ReactionItem {
   final String id;
   final int userId;
   final String authorLabel;
+  final String authorAvatarId;
   final String? emoji;
   final String? presetText;
   final String createdAt;
@@ -88,6 +116,7 @@ class ReactionItem {
     required this.id,
     required this.userId,
     required this.authorLabel,
+    required this.authorAvatarId,
     this.emoji,
     this.presetText,
     required this.createdAt,
@@ -98,6 +127,7 @@ class ReactionItem {
       id: (json['id'] ?? '').toString(),
       userId: (json['userId'] as num?)?.toInt() ?? 0,
       authorLabel: (json['authorLabel'] ?? 'YO').toString(),
+      authorAvatarId: (json['authorAvatarId'] ?? 'cat').toString(),
       emoji: json['emoji']?.toString(),
       presetText: json['presetText']?.toString(),
       createdAt: (json['createdAt'] ?? '').toString(),
@@ -109,15 +139,21 @@ class HomeCardItem {
   final String id;
   final int senderId;
   final String authorLabel;
+  final String authorAvatarId;
   final bool isMine;
   final String dayKey;
   final String dateHeader;
   final String mediaType;
   final String? mediaUrl;
+  final String? linkUrl;
+  final String? linkTitle;
+  final String? linkThumbnail;
+  final String? linkPlatform;
   final String textContent;
   final String bgColor;
   final String fontFamily;
   final String fontSize;
+  final int fontSizePx;
   final String createdAt;
   final List<ReactionItem> reactions;
 
@@ -125,15 +161,21 @@ class HomeCardItem {
     required this.id,
     required this.senderId,
     required this.authorLabel,
+    required this.authorAvatarId,
     required this.isMine,
     required this.dayKey,
     required this.dateHeader,
     required this.mediaType,
     this.mediaUrl,
+    this.linkUrl,
+    this.linkTitle,
+    this.linkThumbnail,
+    this.linkPlatform,
     required this.textContent,
     required this.bgColor,
     required this.fontFamily,
     required this.fontSize,
+    required this.fontSizePx,
     required this.createdAt,
     required this.reactions,
   });
@@ -144,15 +186,21 @@ class HomeCardItem {
       id: (json['id'] ?? '').toString(),
       senderId: (json['senderId'] as num?)?.toInt() ?? 0,
       authorLabel: (json['authorLabel'] ?? 'YO').toString(),
+      authorAvatarId: (json['authorAvatarId'] ?? 'cat').toString(),
       isMine: json['isMine'] == true,
       dayKey: (json['dayKey'] ?? '').toString(),
       dateHeader: (json['dateHeader'] ?? 'HOY').toString(),
       mediaType: (json['mediaType'] ?? 'none').toString(),
       mediaUrl: json['mediaUrl']?.toString(),
-      textContent: (json['textContent'] ?? '').toString(),
+      linkUrl: json['linkUrl']?.toString(),
+      linkTitle: json['linkTitle']?.toString(),
+      linkThumbnail: json['linkThumbnail']?.toString(),
+      linkPlatform: json['linkPlatform']?.toString(),
+      textContent: (json['textContent'] ?? json['body'] ?? '').toString(),
       bgColor: (json['bgColor'] ?? '#FFDAD6').toString(),
       fontFamily: (json['fontFamily'] ?? 'sans').toString(),
       fontSize: (json['fontSize'] ?? 'md').toString(),
+      fontSizePx: (json['fontSizePx'] as num?)?.toInt() ?? 18,
       createdAt: (json['createdAt'] ?? '').toString(),
       reactions: rawReactions is List
           ? rawReactions
@@ -169,9 +217,16 @@ class BoardCardItem {
   final String boardId;
   final int creatorId;
   final String authorLabel;
+  final String authorAvatarId;
   final bool isMine;
+  final String categoryTag;
   final String title;
   final String notes;
+  final String? url;
+  final String? linkTitle;
+  final String? linkThumbnail;
+  final String? linkPlatform;
+  final String? mediaUrl;
   final String emoji;
   final String bgColor;
   final String status;
@@ -182,9 +237,16 @@ class BoardCardItem {
     required this.boardId,
     required this.creatorId,
     required this.authorLabel,
+    required this.authorAvatarId,
     required this.isMine,
+    required this.categoryTag,
     required this.title,
     required this.notes,
+    this.url,
+    this.linkTitle,
+    this.linkThumbnail,
+    this.linkPlatform,
+    this.mediaUrl,
     required this.emoji,
     required this.bgColor,
     required this.status,
@@ -197,10 +259,17 @@ class BoardCardItem {
       boardId: (json['boardId'] ?? '').toString(),
       creatorId: (json['creatorId'] as num?)?.toInt() ?? 0,
       authorLabel: (json['authorLabel'] ?? 'YO').toString(),
+      authorAvatarId: (json['authorAvatarId'] ?? 'cat').toString(),
       isMine: json['isMine'] == true,
+      categoryTag: (json['categoryTag'] ?? 'PENDIENTE').toString(),
       title: (json['title'] ?? '').toString(),
       notes: (json['notes'] ?? '').toString(),
-      emoji: (json['emoji'] ?? '✨').toString(),
+      url: json['url']?.toString(),
+      linkTitle: json['linkTitle']?.toString(),
+      linkThumbnail: json['linkThumbnail']?.toString(),
+      linkPlatform: json['linkPlatform']?.toString(),
+      mediaUrl: json['mediaUrl']?.toString(),
+      emoji: (json['emoji'] ?? '').toString(),
       bgColor: (json['bgColor'] ?? '#FFDAD6').toString(),
       status: (json['status'] ?? 'active').toString(),
       createdAt: (json['createdAt'] ?? '').toString(),
@@ -213,6 +282,7 @@ class BoardModel {
   final String slug;
   final String title;
   final String icon;
+  final String bgColor;
   final bool isSystem;
   final List<BoardCardItem> items;
 
@@ -221,6 +291,7 @@ class BoardModel {
     required this.slug,
     required this.title,
     required this.icon,
+    required this.bgColor,
     required this.isSystem,
     required this.items,
   });
@@ -231,7 +302,8 @@ class BoardModel {
       id: (json['id'] ?? '').toString(),
       slug: (json['slug'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
-      icon: (json['icon'] ?? '📌').toString(),
+      icon: (json['icon'] ?? 'schedule').toString(),
+      bgColor: (json['bgColor'] ?? '#F4EFE8').toString(),
       isSystem: json['isSystem'] == true,
       items: rawItems is List
           ? rawItems
@@ -250,6 +322,7 @@ class DecisionCandidate {
   final String emoji;
   final String bgColor;
   final String authorLabel;
+  final String authorAvatarId;
 
   const DecisionCandidate({
     required this.id,
@@ -258,6 +331,7 @@ class DecisionCandidate {
     required this.emoji,
     required this.bgColor,
     required this.authorLabel,
+    required this.authorAvatarId,
   });
 
   factory DecisionCandidate.fromJson(Map<String, dynamic> json) {
@@ -265,9 +339,10 @@ class DecisionCandidate {
       id: (json['id'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
       notes: (json['notes'] ?? '').toString(),
-      emoji: (json['emoji'] ?? '🎲').toString(),
+      emoji: (json['emoji'] ?? '').toString(),
       bgColor: (json['bgColor'] ?? '#FFDAD6').toString(),
       authorLabel: (json['authorLabel'] ?? 'YO').toString(),
+      authorAvatarId: (json['authorAvatarId'] ?? 'cat').toString(),
     );
   }
 }
@@ -404,14 +479,14 @@ class SyncPayload {
           : const [],
       quickReplies: rawReplies is List
           ? rawReplies.map((e) => e.toString()).toList()
-          : const ['Te amo ❤️', '¡Qué lindo! 🥰', '¡Sí, hagámoslo! ✨'],
+          : const ['Te amo', 'Me alegraste el día', 'Qué bonito'],
       boards: rawBoards is List
           ? rawBoards
               .whereType<Map<String, dynamic>>()
               .map(BoardModel.fromJson)
               .toList()
           : const [],
-      actividadesBoardId: (json['actividadesBoardId'] ?? '').toString(),
+      actividadesBoardId: (json['actividadesBoardId'] ?? '1').toString(),
       activeVoting: activeVotingMap is Map<String, dynamic>
           ? ActiveVotingState.fromJson(activeVotingMap)
           : null,

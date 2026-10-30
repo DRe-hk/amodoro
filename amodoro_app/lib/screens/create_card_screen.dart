@@ -1,9 +1,12 @@
 import 'dart:convert';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import '../models/amodoro_models.dart';
 import '../services/api_client.dart';
 import '../theme/amodoro_theme.dart';
 import '../widgets/drawing_canvas.dart';
+import '../widgets/link_preview_card.dart';
 
 class CreateCardScreen extends StatefulWidget {
   final AmodoroApiClient api;
@@ -20,37 +23,32 @@ class CreateCardScreen extends StatefulWidget {
 }
 
 class _CreateCardScreenState extends State<CreateCardScreen> {
-  final TextEditingController _textController = TextEditingController(
-    text: '¡Hoy pensé en ti y te dejé esta notita especial! ❤️',
-  );
+  final TextEditingController _textController = TextEditingController();
   final DrawingCanvasController _drawingController = DrawingCanvasController();
+  final ImagePicker _picker = ImagePicker();
 
-  String _mediaType = 'none'; // 'none' | 'drawing' | 'photo'
+  // 'none' = cuadrícula de 4 opciones (si no elige ninguna o cancela, se envía solo texto)
+  // 'photo' = foto tomada o imagen elegida
+  // 'drawing' = lienzo de dibujo activo
+  // 'link' = link embebido con vista previa
+  String _mediaMode = 'none';
+  String? _imageDataUrl;
+  LinkPreviewModel? _linkPreview;
+
   String _bgColor = '#FFDAD6';
   String _fontFamily = 'sans';
-  String _fontSize = 'lg';
-  int _selectedPresetArt = 0;
+  int _fontSizePx = 18;
   bool _sending = false;
+  bool _loadingLink = false;
 
-  static const List<String> _emojis = [
-    '❤️',
-    '🥰',
-    '✨',
-    '🌸',
-    '☕',
-    '🌙',
-    '🍕',
-    '🎬',
-    '🎵',
-    '🫂'
+  static const List<Map<String, String>> _fontOptions = [
+    {'key': 'sans', 'label': 'FUENTE · RALEWAY'},
+    {'key': 'serif', 'label': 'FUENTE · SERIF'},
+    {'key': 'hand', 'label': 'FUENTE · CALIGRAFÍA'},
+    {'key': 'mono', 'label': 'FUENTE · MONO'},
   ];
 
-  static const List<Map<String, String>> _artPresets = [
-    {'title': 'Café Juntos ☕', 'emoji': '☕🥐', 'bg': '#F5E0B5'},
-    {'title': 'Noche Estrellada 🌙', 'emoji': '🌙✨', 'bg': '#E8DEF8'},
-    {'title': 'Abrazo Cálido 🫂', 'emoji': '🫂❤️', 'bg': '#FFD8E4'},
-    {'title': 'Cita Sorpresa 🎟️', 'emoji': '🎬🍿', 'bg': '#C8E6C9'},
-  ];
+  static const List<int> _sizeOptionsPx = [14, 18, 22, 26, 32];
 
   @override
   void dispose() {
@@ -59,74 +57,237 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     super.dispose();
   }
 
-  Future<String> _generatePresetArtPng(int index) async {
-    final preset = _artPresets[index % _artPresets.length];
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, 600, 360));
-
-    final bg = AmodoroTheme.parseHexColor(preset['bg']!);
-    canvas.drawRect(
-      const Rect.fromLTWH(0, 0, 600, 360),
-      Paint()..color = bg,
-    );
-
-    final tp = TextPainter(
-      text: TextSpan(
-        text: '${preset['emoji']}\n${preset['title']}',
-        style: TextStyle(
-          fontSize: 42,
-          fontWeight: FontWeight.w800,
-          color: AmodoroTheme.getContrastingInk(bg),
-          height: 1.3,
-        ),
-      ),
-      textAlign: TextAlign.center,
-      textDirection: TextDirection.ltr,
-    )..layout(maxWidth: 540);
-
-    tp.paint(
-      canvas,
-      Offset((600 - tp.width) / 2, (360 - tp.height) / 2),
-    );
-
-    final picture = recorder.endRecording();
-    final img = await picture.toImage(600, 360);
-    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-    return 'data:image/png;base64,${base64Encode(bytes!.buffer.asUint8List())}';
+  Future<void> _pickCameraOrGallery(ImageSource source) async {
+    try {
+      final XFile? picked = await _picker.pickImage(
+        source: source,
+        maxWidth: 1280,
+        maxHeight: 1280,
+        imageQuality: 84,
+      );
+      if (picked == null) {
+        // Si cancela la cámara o galería, se mantiene en 'none' (solo texto)
+        return;
+      }
+      final bytes = await picked.readAsBytes();
+      final ext = picked.path.toLowerCase().endsWith('.png') ? 'png' : 'jpeg';
+      if (mounted) {
+        setState(() {
+          _imageDataUrl = 'data:image/$ext;base64,${base64Encode(bytes)}';
+          _mediaMode = 'photo';
+          _linkPreview = null;
+        });
+      }
+    } catch (_) {
+      // Si el usuario cancela o no hay cámara disponible, permanece como solo texto
+    }
   }
 
-  Future<void> _submit() async {
+  void _openDrawingMode() {
+    setState(() {
+      _mediaMode = 'drawing';
+      _imageDataUrl = null;
+      _linkPreview = null;
+    });
+  }
+
+  void _cancelMediaSelection() {
+    _drawingController.clear();
+    setState(() {
+      _mediaMode = 'none';
+      _imageDataUrl = null;
+      _linkPreview = null;
+    });
+  }
+
+  Future<void> _openLinkDialog() async {
+    final linkCtrl = TextEditingController();
+    final rawUrl = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final bg = Theme.of(ctx).scaffoldBackgroundColor;
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: AmodoroTheme.floatingPerspectiveBox(
+              color: bg,
+              radius: 26,
+              thickness: 2.5,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'INSERTAR LINK EMBEBIDO',
+                  style: TextStyle(fontSize: 12, letterSpacing: 1.4),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: AmodoroTheme.floatingPerspectiveBox(
+                    color: Theme.of(ctx).colorScheme.surfaceContainer,
+                    radius: 16,
+                    thickness: 2.0,
+                  ),
+                  child: TextField(
+                    controller: linkCtrl,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      border: InputBorder.none,
+                      hintText: 'Link de Instagram, YouTube, Spotify...',
+                      icon: AmodoroTheme.sysIcon(Symbols.link, size: 18),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => Navigator.pop(ctx, null),
+                        child: Container(
+                          height: 42,
+                          decoration: AmodoroTheme.floatingPerspectiveBox(
+                            color: Theme.of(ctx).colorScheme.surfaceContainer,
+                            radius: 999,
+                            thickness: 2.0,
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'CANCELAR',
+                              style:
+                                  TextStyle(fontSize: 11.5, letterSpacing: 1.2),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => Navigator.pop(ctx, linkCtrl.text.trim()),
+                        child: Container(
+                          height: 42,
+                          decoration: AmodoroTheme.floatingPerspectiveBox(
+                            color: AmodoroTheme.coralPillLight,
+                            radius: 999,
+                            thickness: 2.0,
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'AÑADIR LINK',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                letterSpacing: 1.2,
+                                color: AmodoroTheme.coralPillTextLight,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (rawUrl == null || rawUrl.trim().isEmpty) {
+      // Si cancela el diálogo, permanece en modo 'none' (solo texto)
+      return;
+    }
+
+    setState(() => _loadingLink = true);
+    try {
+      final preview = await widget.api.fetchLinkPreview(rawUrl.trim());
+      if (mounted) {
+        setState(() {
+          _loadingLink = false;
+          _linkPreview = preview;
+          _mediaMode = 'link';
+          _imageDataUrl = null;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loadingLink = false;
+          _linkPreview = LinkPreviewModel(
+            url: rawUrl.trim(),
+            title: rawUrl.trim(),
+            platform: 'Web',
+          );
+          _mediaMode = 'link';
+        });
+      }
+    }
+  }
+
+  String _sizeKeyFromPx(int px) {
+    if (px <= 14) return 'sm';
+    if (px <= 18) return 'md';
+    if (px <= 22) return 'lg';
+    return 'xl';
+  }
+
+  Future<void> _submitCard() async {
     final text = _textController.text.trim();
-    if (text.isEmpty) {
+    String finalMediaType = 'none';
+    String? finalMediaDataUrl;
+    String? linkUrl;
+    String? linkTitle;
+    String? linkThumbnail;
+    String? linkPlatform;
+
+    if (_mediaMode == 'photo' && _imageDataUrl != null) {
+      finalMediaType = 'photo';
+      finalMediaDataUrl = _imageDataUrl;
+    } else if (_mediaMode == 'drawing' && !_drawingController.isEmpty) {
+      finalMediaDataUrl = await _drawingController.toPngDataUrl();
+      if (finalMediaDataUrl != null) {
+        finalMediaType = 'drawing';
+      }
+    } else if (_mediaMode == 'link' && _linkPreview != null) {
+      finalMediaType = 'link';
+      linkUrl = _linkPreview!.url;
+      linkTitle = _linkPreview!.title;
+      linkThumbnail = _linkPreview!.thumbnail;
+      linkPlatform = _linkPreview!.platform;
+    }
+
+    // Si no eligió ninguna opción (o cerró/canceló el lienzo/foto) y escribió texto, se sube solo texto
+    if (text.isEmpty &&
+        finalMediaDataUrl == null &&
+        (linkUrl == null || linkUrl.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Escribe un mensaje para tu tarjeta')),
+        const SnackBar(
+          content: Text('Escribe aquí tu mensaje o añade una opción arriba.'),
+        ),
       );
       return;
     }
 
     setState(() => _sending = true);
     try {
-      String? mediaDataUrl;
-      String finalMediaType = _mediaType;
-
-      if (_mediaType == 'drawing') {
-        mediaDataUrl = await _drawingController.toPngDataUrl();
-        if (mediaDataUrl == null) {
-          finalMediaType = 'none';
-        }
-      } else if (_mediaType == 'photo') {
-        mediaDataUrl = await _generatePresetArtPng(_selectedPresetArt);
-      }
-
       await widget.api.createHomeCard(
         textContent: text,
         bgColor: _bgColor,
         fontFamily: _fontFamily,
-        fontSize: _fontSize,
+        fontSize: _sizeKeyFromPx(_fontSizePx),
+        fontSizePx: _fontSizePx,
         mediaType: finalMediaType,
-        mediaDataUrl: mediaDataUrl,
+        mediaDataUrl: finalMediaDataUrl,
+        linkUrl: linkUrl,
+        linkTitle: linkTitle,
+        linkThumbnail: linkThumbnail,
+        linkPlatform: linkPlatform,
       );
-
       if (mounted) {
         Navigator.of(context).pop(true);
       }
@@ -134,7 +295,9 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       if (mounted) {
         setState(() => _sending = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+          ),
         );
       }
     }
@@ -142,290 +305,315 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = AmodoroTheme.parseHexColor(_bgColor);
     final cardInk = AmodoroTheme.getContrastingInk(cardColor);
     final cardMuted = AmodoroTheme.getContrastingMutedInk(cardColor);
+    final capsuleSurface =
+        isDark ? const Color(0xFF1F2421) : const Color(0xFFF4EFE8);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Crear tarjeta para ${widget.partnerNickname}',
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Cápsula superior con X (como en el boceto)
+              Center(
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).pop(false),
+                  child: Container(
+                    width: 120,
+                    height: 38,
+                    decoration: AmodoroTheme.floatingPerspectiveBox(
+                      color: capsuleSurface,
+                      radius: 999,
+                      thickness: 2.5,
+                    ),
+                    child: Center(
+                      child: AmodoroTheme.sysIcon(
+                        Symbols.close,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // Tarjeta principal donde se elige la opción superior y se edita el texto directamente sobre ella
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: AmodoroTheme.floatingPerspectiveBox(
+                  color: cardColor,
+                  radius: 30,
+                  thickness: 3.0,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Parte superior de la tarjeta: Cuadrícula 2x2 de 4 opciones (o el medio elegido con X para cancelar)
+                    _buildTopMediaSection(cardColor, cardInk),
+
+                    const SizedBox(height: 18),
+
+                    // Edición de texto directamente sobre la misma tarjeta ("ESCRIBE AQUÍ")
+                    TextField(
+                      controller: _textController,
+                      maxLines: null,
+                      minLines: 4,
+                      style: AmodoroTheme.getCardTextStyle(
+                        fontFamily: _fontFamily,
+                        color: cardInk,
+                        fontSizePx: _fontSizePx,
+                      ),
+                      decoration: InputDecoration(
+                        border: InputBorder.none,
+                        hintText: 'ESCRIBE AQUÍ',
+                        hintStyle: AmodoroTheme.getCardTextStyle(
+                          fontFamily: _fontFamily,
+                          color: cardMuted.withValues(alpha: 0.65),
+                          fontSizePx: _fontSizePx,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Fila inferior de 3 menús desplegables en cápsulas: FUENTE | 18 PX | COLOR
+              Row(
+                children: [
+                  Expanded(
+                    flex: 4,
+                    child: _buildFontDropdownCapsule(capsuleSurface),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 3,
+                    child: _buildSizeDropdownCapsule(capsuleSurface),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 3,
+                    child: _buildColorDropdownCapsule(capsuleSurface),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+
+              // Botón principal en MAYÚSCULAS con borde en perspectiva
+              GestureDetector(
+                onTap: _sending ? null : _submitCard,
+                child: Container(
+                  height: 50,
+                  decoration: AmodoroTheme.floatingPerspectiveBox(
+                    color: isDark
+                        ? AmodoroTheme.coralPillDark
+                        : AmodoroTheme.coralPillLight,
+                    radius: 999,
+                    thickness: 2.5,
+                    perspectiveEdgeColor: isDark
+                        ? AmodoroTheme.coralPillBorderDark
+                        : AmodoroTheme.coralPillBorderLight,
+                  ),
+                  child: Center(
+                    child: Text(
+                      _sending
+                          ? 'PUBLICANDO...'
+                          : 'ENVIAR A ${widget.partnerNickname.toUpperCase()}',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        letterSpacing: 1.5,
+                        color: isDark
+                            ? AmodoroTheme.coralPillTextDark
+                            : AmodoroTheme.coralPillTextLight,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Selector de modo: Solo texto / Dibujo / Ilustración
-            Row(
-              children: [
-                _buildModeButton('none', '📝 Solo texto'),
-                const SizedBox(width: 8),
-                _buildModeButton('drawing', '🎨 Dibujo'),
-                const SizedBox(width: 8),
-                _buildModeButton('photo', '📷 Postal'),
-              ],
-            ),
-            const SizedBox(height: 14),
+    );
+  }
 
-            if (_mediaType == 'drawing') ...[
-              InteractiveDrawingPad(controller: _drawingController),
-              const SizedBox(height: 14),
-            ] else if (_mediaType == 'photo') ...[
-              const Text(
-                'Elige una postal ilustrada para acompañar tu mensaje:',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+  Widget _buildTopMediaSection(Color cardColor, Color cardInk) {
+    if (_loadingLink) {
+      return Container(
+        height: 180,
+        decoration: AmodoroTheme.floatingPerspectiveBox(
+          color: Colors.white.withValues(alpha: 0.55),
+          radius: 24,
+          thickness: 2.5,
+        ),
+        child: const Center(
+          child: Text('CARGANDO VISTA PREVIA DEL LINK...'),
+        ),
+      );
+    }
+
+    if (_mediaMode == 'photo' && _imageDataUrl != null) {
+      final comma = _imageDataUrl!.indexOf(',');
+      final bytes = base64Decode(_imageDataUrl!.substring(comma + 1));
+      return Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: Image.memory(
+              bytes,
+              height: 220,
+              width: double.infinity,
+              fit: BoxFit.cover,
+            ),
+          ),
+          Positioned(
+            top: 10,
+            right: 10,
+            child: _buildCancelMediaChip(),
+          ),
+        ],
+      );
+    }
+
+    if (_mediaMode == 'drawing') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'LIENZO DE DIBUJO',
+                style: TextStyle(
+                  fontSize: 11,
+                  letterSpacing: 1.2,
+                  color: cardInk,
+                ),
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: List.generate(_artPresets.length, (i) {
-                  final p = _artPresets[i];
-                  final selected = _selectedPresetArt == i;
-                  return ChoiceChip(
-                    label: Text(p['title']!),
-                    selected: selected,
-                    onSelected: (_) => setState(() => _selectedPresetArt = i),
-                  );
-                }),
-              ),
-              const SizedBox(height: 14),
+              _buildCancelMediaChip(),
             ],
+          ),
+          const SizedBox(height: 8),
+          InteractiveDrawingPad(controller: _drawingController),
+        ],
+      );
+    }
 
-            // Vista previa flotante redondeada (28dp) con auto-contraste
-            Container(
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: cardColor,
-                borderRadius: BorderRadius.circular(28),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: cardInk.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          'DE: YO → ${widget.partnerNickname.toUpperCase()}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.1,
-                            color: cardInk,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        'VISTA PREVIA',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: cardMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_mediaType != 'none') ...[
-                    const SizedBox(height: 14),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 20,
-                        horizontal: 16,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.65),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Center(
-                        child: Text(
-                          _mediaType == 'drawing'
-                              ? '🎨 Tu dibujo hecho a mano aparecerá aquí arriba'
-                              : '${_artPresets[_selectedPresetArt]['emoji']} ${_artPresets[_selectedPresetArt]['title']}',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF1F1B18),
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 14),
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: _textController,
-                    builder: (context, val, _) {
-                      return Text(
-                        val.text.isEmpty ? 'Tu mensaje...' : val.text,
-                        style: AmodoroTheme.getCardTextStyle(
-                          fontFamily: _fontFamily,
-                          fontSize: _fontSize,
-                          color: cardInk,
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
+    if (_mediaMode == 'link' && _linkPreview != null) {
+      return LinkPreviewCard(
+        url: _linkPreview!.url,
+        title: _linkPreview!.title,
+        thumbnail: _linkPreview!.thumbnail,
+        platform: _linkPreview!.platform,
+        cardBgColor: cardColor,
+        onRemove: _cancelMediaSelection,
+      );
+    }
 
-            // Campo de texto + barra de emojis
-            TextField(
-              controller: _textController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Mensaje de la tarjeta',
-                hintText: 'Escribe algo especial con emojis...',
+    // Por defecto: Cuadrícula 2x2 de las 4 opciones del boceto (CAPTURAR, IMAGEN, DIBUJO, LINK)
+    final optionTileColor = Colors.white.withValues(alpha: 0.52);
+    final edgeColor = AmodoroTheme.darkenForPerspective(cardColor, 0.24);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: AmodoroTheme.floatingPerspectiveBox(
+        color: Colors.white.withValues(alpha: 0.28),
+        radius: 26,
+        thickness: 2.5,
+        perspectiveEdgeColor: edgeColor,
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _buildQuadOptionTile(
+                  icon: Symbols.photo_camera,
+                  label: 'CAPTURAR',
+                  tileColor: optionTileColor,
+                  edgeColor: edgeColor,
+                  inkColor: cardInk,
+                  onTap: () => _pickCameraOrGallery(ImageSource.camera),
+                ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildQuadOptionTile(
+                  icon: Symbols.image,
+                  label: 'IMAGEN',
+                  tileColor: optionTileColor,
+                  edgeColor: edgeColor,
+                  inkColor: cardInk,
+                  onTap: () => _pickCameraOrGallery(ImageSource.gallery),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildQuadOptionTile(
+                  icon: Symbols.edit,
+                  label: 'DIBUJO',
+                  tileColor: optionTileColor,
+                  edgeColor: edgeColor,
+                  inkColor: cardInk,
+                  onTap: _openDrawingMode,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildQuadOptionTile(
+                  icon: Symbols.north_east,
+                  label: 'LINK',
+                  tileColor: optionTileColor,
+                  edgeColor: edgeColor,
+                  inkColor: cardInk,
+                  onTap: _openLinkDialog,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuadOptionTile({
+    required IconData icon,
+    required String label,
+    required Color tileColor,
+    required Color edgeColor,
+    required Color inkColor,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 92,
+        decoration: AmodoroTheme.floatingPerspectiveBox(
+          color: tileColor,
+          radius: 20,
+          thickness: 2.5,
+          perspectiveEdgeColor: edgeColor,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AmodoroTheme.sysIcon(icon, size: 28, color: inkColor),
             const SizedBox(height: 8),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _emojis.map((e) {
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: ActionChip(
-                      label: Text(e, style: const TextStyle(fontSize: 16)),
-                      onPressed: () {
-                        _textController.text = '${_textController.text}$e';
-                        _textController.selection = TextSelection.fromPosition(
-                          TextPosition(offset: _textController.text.length),
-                        );
-                      },
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // Selector de Color Pastel M3
-            const Text(
-              'Color de tarjeta (contraste de texto automático):',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: AmodoroTheme.pastelPresets.map((preset) {
-                final selected =
-                    _bgColor.toUpperCase() == preset.hex.toUpperCase();
-                return GestureDetector(
-                  onTap: () => setState(() => _bgColor = preset.hex),
-                  child: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: preset.color,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: selected
-                            ? AmodoroTheme.coralPillLight
-                            : Colors.black26,
-                        width: selected ? 3 : 1,
-                      ),
-                    ),
-                    child: selected
-                        ? const Icon(Icons.check_rounded,
-                            size: 18, color: Color(0xFF1F1B18))
-                        : null,
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 14),
-
-            // Tipografía y Tamaño
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Fuente:',
-                        style: TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        children: [
-                          _buildFontChip('sans', 'Sans'),
-                          _buildFontChip('serif', 'Serif'),
-                          _buildFontChip('hand', 'Carta'),
-                          _buildFontChip('mono', 'Mono'),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Tamaño:',
-                      style:
-                          TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 4,
-                      children: ['sm', 'md', 'lg', 'xl'].map((sz) {
-                        return ChoiceChip(
-                          label: Text(sz.toUpperCase()),
-                          selected: _fontSize == sz,
-                          onSelected: (_) => setState(() => _fontSize = sz),
-                        );
-                      }).toList(),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 22),
-
-            FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: AmodoroTheme.coralPillLight,
-                foregroundColor: AmodoroTheme.coralPillTextLight,
-                minimumSize: const Size.fromHeight(54),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
-              onPressed: _sending ? null : _submit,
-              icon: const Icon(Icons.send_rounded),
-              label: Text(
-                _sending
-                    ? 'Enviando tarjeta...'
-                    : 'Enviar a ${widget.partnerNickname}',
-                style:
-                    const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11.5,
+                letterSpacing: 1.3,
+                color: inkColor,
               ),
             ),
           ],
@@ -434,35 +622,157 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     );
   }
 
-  Widget _buildModeButton(String mode, String label) {
-    final selected = _mediaType == mode;
-    return Expanded(
-      child: OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          backgroundColor: selected
-              ? AmodoroTheme.coralPillLight
-              : Theme.of(context).colorScheme.surfaceContainer,
-          foregroundColor: selected
-              ? AmodoroTheme.coralPillTextLight
-              : Theme.of(context).colorScheme.onSurface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
+  Widget _buildCancelMediaChip() {
+    return GestureDetector(
+      onTap: _cancelMediaSelection,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: AmodoroTheme.floatingPerspectiveBox(
+          color: const Color(0xFFFCF9F5),
+          radius: 999,
+          thickness: 2.0,
         ),
-        onPressed: () => setState(() => _mediaType = mode),
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AmodoroTheme.sysIcon(
+              Symbols.close,
+              size: 15,
+              color: const Color(0xFF1F1B18),
+            ),
+            const SizedBox(width: 4),
+            const Text(
+              'SOLO TEXTO',
+              style: TextStyle(
+                fontSize: 10,
+                letterSpacing: 1.0,
+                color: Color(0xFF1F1B18),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildFontChip(String key, String label) {
-    return ChoiceChip(
-      label: Text(label),
-      selected: _fontFamily == key,
-      onSelected: (_) => setState(() => _fontFamily = key),
+  Widget _buildFontDropdownCapsule(Color surface) {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: AmodoroTheme.floatingPerspectiveBox(
+        color: surface,
+        radius: 999,
+        thickness: 2.5,
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _fontFamily,
+          isExpanded: true,
+          icon: AmodoroTheme.sysIcon(Symbols.expand_more, size: 18),
+          style: TextStyle(
+            fontSize: 11,
+            letterSpacing: 1.0,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+          items: _fontOptions.map((opt) {
+            return DropdownMenuItem<String>(
+              value: opt['key'],
+              child: Text(
+                opt['label']!,
+                overflow: TextOverflow.ellipsis,
+              ),
+            );
+          }).toList(),
+          onChanged: (v) {
+            if (v != null) setState(() => _fontFamily = v);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSizeDropdownCapsule(Color surface) {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: AmodoroTheme.floatingPerspectiveBox(
+        color: surface,
+        radius: 999,
+        thickness: 2.5,
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          value: _fontSizePx,
+          isExpanded: true,
+          icon: AmodoroTheme.sysIcon(Symbols.expand_more, size: 18),
+          style: TextStyle(
+            fontSize: 11,
+            letterSpacing: 1.0,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+          items: _sizeOptionsPx.map((px) {
+            return DropdownMenuItem<int>(
+              value: px,
+              child: Text('$px PX'),
+            );
+          }).toList(),
+          onChanged: (v) {
+            if (v != null) setState(() => _fontSizePx = v);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildColorDropdownCapsule(Color surface) {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: AmodoroTheme.floatingPerspectiveBox(
+        color: surface,
+        radius: 999,
+        thickness: 2.5,
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _bgColor,
+          isExpanded: true,
+          icon: AmodoroTheme.sysIcon(Symbols.expand_more, size: 18),
+          style: TextStyle(
+            fontSize: 11,
+            letterSpacing: 1.0,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+          items: AmodoroTheme.pastelPresets.map((preset) {
+            return DropdownMenuItem<String>(
+              value: preset.hex,
+              child: Row(
+                children: [
+                  Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: preset.color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      preset.name.toUpperCase(),
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10.5),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+          onChanged: (v) {
+            if (v != null) setState(() => _bgColor = v);
+          },
+        ),
+      ),
     );
   }
 }

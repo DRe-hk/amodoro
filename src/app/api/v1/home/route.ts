@@ -5,31 +5,33 @@ import { db } from "@/db";
 import { media, type CardFont, type CardFontSize } from "@/db/schema";
 import { CORS_HEADERS, getApiUser, jsonResponse } from "@/lib/api-auth";
 import { createHomeCard, reactToHomeCard } from "@/lib/home-cards";
+import { fetchLinkPreview } from "@/lib/link-preview";
 import { UPLOADS_PATH } from "@/lib/media";
 
 export async function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS_HEADERS });
 }
 
-async function storeBase64Media(input: {
+export async function storeBase64Media(input: {
   base64: string;
   mime?: string;
   kind?: "image" | "drawing";
   ownerId: number;
 }): Promise<number> {
+  const matchMime = /^data:([^;]+);base64,/.exec(input.base64);
+  const detectedMime = matchMime?.[1] || input.mime || "image/png";
   const cleaned = input.base64.replace(/^data:[^;]+;base64,/, "").trim();
   const bytes = Buffer.from(cleaned, "base64");
   if (bytes.byteLength === 0 || bytes.byteLength > 25 * 1024 * 1024) {
     throw new Error("Tamaño de imagen no válido.");
   }
 
-  const mime = input.mime || "image/png";
   const ext =
-    mime === "image/jpeg"
+    detectedMime === "image/jpeg" || detectedMime === "image/jpg"
       ? "jpg"
-      : mime === "image/webp"
+      : detectedMime === "image/webp"
         ? "webp"
-        : mime === "image/gif"
+        : detectedMime === "image/gif"
           ? "gif"
           : "png";
 
@@ -50,7 +52,7 @@ async function storeBase64Media(input: {
       ownerId: input.ownerId,
       kind: input.kind ?? "image",
       path: relPath,
-      mime,
+      mime: detectedMime,
       bytes: bytes.byteLength,
       createdAt: new Date(),
     })
@@ -70,35 +72,67 @@ export async function POST(request: Request) {
     const payload = (await request.json()) as {
       action: "create_card" | "react";
       body?: string;
+      textContent?: string;
       bgColor?: string;
       fontFamily?: CardFont;
       fontSize?: CardFontSize;
+      fontSizePx?: number;
+      mediaType?: string;
       imageBase64?: string | null;
+      mediaDataUrl?: string | null;
       imageMime?: string;
       mediaKind?: "image" | "drawing";
-      cardId?: number;
+      linkUrl?: string | null;
+      linkTitle?: string | null;
+      linkThumbnail?: string | null;
+      linkPlatform?: string | null;
+      cardId?: number | string;
       emoji?: string | null;
       presetText?: string | null;
     };
 
     if (payload.action === "create_card") {
+      const rawBase64 =
+        payload.imageBase64?.trim() || payload.mediaDataUrl?.trim() || "";
       let mediaId: number | null = null;
-      if (payload.imageBase64) {
+      if (rawBase64) {
         mediaId = await storeBase64Media({
-          base64: payload.imageBase64,
+          base64: rawBase64,
           mime: payload.imageMime,
-          kind: payload.mediaKind ?? "image",
+          kind:
+            payload.mediaKind ??
+            (payload.mediaType === "drawing" ? "drawing" : "image"),
           ownerId: user.id,
         });
       }
 
+      const rawLink = payload.linkUrl?.trim() || "";
+      let linkTitle = payload.linkTitle?.trim() || null;
+      let linkThumbnail = payload.linkThumbnail?.trim() || null;
+      let linkPlatform = payload.linkPlatform?.trim() || null;
+
+      if (rawLink && !linkTitle) {
+        const preview = await fetchLinkPreview(rawLink);
+        linkTitle = preview.title;
+        linkThumbnail = preview.thumbnail;
+        linkPlatform = preview.platform;
+      }
+
+      const textBody = (payload.body ?? payload.textContent ?? "").trim();
+
       const card = createHomeCard({
         authorId: user.id,
         mediaId,
-        body: payload.body ?? "",
-        bgColor: payload.bgColor ?? "#FADADD",
+        mediaType: payload.mediaType,
+        linkUrl: rawLink || null,
+        linkTitle,
+        linkThumbnail,
+        linkPlatform,
+        body: textBody,
+        bgColor: payload.bgColor ?? "#FFDAD6",
         fontFamily: payload.fontFamily ?? "sans",
-        fontSize: payload.fontSize ?? "lg",
+        fontSize: payload.fontSize ?? "md",
+        fontSizePx: payload.fontSizePx,
       });
 
       return jsonResponse({ ok: true, card });

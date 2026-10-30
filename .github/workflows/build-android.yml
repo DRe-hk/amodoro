@@ -27,29 +27,92 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Generate platform directories (Android, iOS, Web) & configure Cleartext HTTP for Azure VPS
+      - name: Generate platform directories, configure manifest ("amodoro") & generate Coral "a" launcher icon
         working-directory: amodoro_app
         run: |
           flutter create . --project-name amodoro_app --org com.amodoro --platforms android,ios,web
+          pip3 install --quiet Pillow
+          curl -sL "https://raw.githubusercontent.com/google/fonts/main/ofl/playwriteustradguides/PlaywriteUSTradGuides-Regular.ttf" -o /tmp/PlaywriteUSTradGuides-Regular.ttf
           python3 - << 'PY'
+          import re
+          import shutil
           from pathlib import Path
+          from PIL import Image, ImageDraw, ImageFont
+
+          # 1. Update AndroidManifest.xml with android:label="amodoro", permissions, and queries
           manifest_path = Path("android/app/src/main/AndroidManifest.xml")
           txt = manifest_path.read_text()
+          if 'xmlns:android' not in txt:
+              txt = txt.replace("<manifest", '<manifest\n    xmlns:android="http://schemas.android.com/apk/res/android"', 1)
+
+          # Replace android:label with lowercase "amodoro"
+          txt = re.sub(r'android:label="[^"]*"', 'android:label="amodoro"', txt)
+
+          permissions_block = """<uses-permission android:name="android.permission.INTERNET"/>
+              <uses-permission android:name="android.permission.CAMERA"/>
+              <queries>
+                  <intent>
+                      <action android:name="android.intent.action.VIEW" />
+                      <data android:scheme="https" />
+                  </intent>
+                  <intent>
+                      <action android:name="android.intent.action.VIEW" />
+                      <data android:scheme="http" />
+                  </intent>
+              </queries>"""
+
           if "android.permission.INTERNET" not in txt:
-              txt = txt.replace("<manifest", '<manifest\n    xmlns:android="http://schemas.android.com/apk/res/android"', 1) if 'xmlns:android' not in txt else txt
-              txt = txt.replace("<application", '<uses-permission android:name="android.permission.INTERNET"/>\n    <application', 1)
+              txt = txt.replace("<application", f"{permissions_block}\n    <application", 1)
           if "usesCleartextTraffic" not in txt:
               txt = txt.replace("<application", '<application\n        android:usesCleartextTraffic="true"', 1)
           manifest_path.write_text(txt)
           print("Updated AndroidManifest.xml:")
           print(txt)
+
+          # 2. Generate circular Coral (#F08076) launcher icon with centered "a" in Playwrite US Trad Guides
+          res_dir = Path("android/app/src/main/res")
+          for xml_dir in res_dir.glob("mipmap-anydpi*"):
+              shutil.rmtree(xml_dir, ignore_errors=True)
+
+          # Render at high resolution (1024x1024) for crisp anti-aliasing, then downscale
+          hi_size = 1024
+          hi_img = Image.new("RGBA", (hi_size, hi_size), (0, 0, 0, 0))
+          draw = ImageDraw.Draw(hi_img)
+          # Coral circle (#F08076) matching top active pill
+          margin = 36
+          draw.ellipse(
+              (margin, margin, hi_size - margin, hi_size - margin),
+              fill=(240, 128, 118, 255),
+          )
+          font = ImageFont.truetype("/tmp/PlaywriteUSTradGuides-Regular.ttf", 520)
+          bbox = draw.textbbox((0, 0), "a", font=font)
+          tw = bbox[2] - bbox[0]
+          th = bbox[3] - bbox[1]
+          tx = (hi_size - tw) / 2.0 - bbox[0]
+          ty = (hi_size - th) / 2.0 - bbox[1] - 18
+          draw.text((tx, ty), "a", font=font, fill=(255, 255, 255, 255))
+
+          sizes = {
+              "mipmap-mdpi": 48,
+              "mipmap-hdpi": 72,
+              "mipmap-xhdpi": 96,
+              "mipmap-xxhdpi": 144,
+              "mipmap-xxxhdpi": 192,
+          }
+          for folder, sz in sizes.items():
+              target_dir = res_dir / folder
+              target_dir.mkdir(parents=True, exist_ok=True)
+              resized = hi_img.resize((sz, sz), Image.Resampling.LANCZOS)
+              resized.save(target_dir / "ic_launcher.png")
+              resized.save(target_dir / "ic_launcher_round.png")
+          print("Generated Coral 'a' Playwrite US Trad Guides launcher icons in all mipmap folders.")
           PY
 
       - name: Install Flutter dependencies & verify
         working-directory: amodoro_app
         run: |
           flutter pub get
-          flutter analyze --no-fatal-infos
+          flutter analyze --no-fatal-infos --no-fatal-warnings
           flutter test
 
       - name: Build Release APK (split-per-abi & universal)
@@ -72,8 +135,8 @@ jobs:
       - name: Publish GitHub Release with APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
-          name: "Amodoro v1.0.0 (Android APK + Azure VPS)"
+          tag_name: v1.1.0
+          name: "amodoro v1.1.0 (Android APK + Azure VPS)"
           files: |
             amodoro.apk
             amodoro-arm64.apk

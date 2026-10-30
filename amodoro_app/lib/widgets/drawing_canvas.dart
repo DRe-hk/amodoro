@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import '../theme/amodoro_theme.dart';
 
 class DrawingStroke {
   final List<Offset> points;
@@ -123,6 +125,7 @@ class InteractiveDrawingPad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
@@ -139,15 +142,21 @@ class InteractiveDrawingPad extends StatelessWidget {
                   return GestureDetector(
                     onTap: () => controller.setColor(c),
                     child: Container(
-                      width: 28,
-                      height: 28,
+                      width: 26,
+                      height: 26,
                       decoration: BoxDecoration(
                         color: c,
                         shape: BoxShape.circle,
-                        border: Border.all(
-                          color: selected ? Colors.white : Colors.black26,
-                          width: selected ? 3 : 1,
-                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: selected
+                                ? AmodoroTheme.coralPillLight
+                                : Colors.black26,
+                            offset: const Offset(2, 2),
+                            blurRadius: 0,
+                            spreadRadius: 0,
+                          ),
+                        ],
                       ),
                     ),
                   );
@@ -155,31 +164,56 @@ class InteractiveDrawingPad extends StatelessWidget {
                 const SizedBox(width: 4),
                 ..._widths.map((w) {
                   final selected = controller.currentWidth == w;
-                  return ChoiceChip(
-                    label: Text('${w.toInt()}px'),
-                    selected: selected,
-                    onSelected: (_) => controller.setStrokeWidth(w),
+                  return GestureDetector(
+                    onTap: () => controller.setStrokeWidth(w),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: AmodoroTheme.floatingPerspectiveBox(
+                        fillColor: selected
+                            ? AmodoroTheme.coralPillLight
+                            : (isDark
+                                  ? AmodoroTheme.surfaceDark
+                                  : AmodoroTheme.surfaceLight),
+                        isDark: isDark,
+                        borderRadius: 999,
+                        thickness: 2.0,
+                      ),
+                      child: Text(
+                        '${w.toInt()}PX',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w300,
+                          color: selected
+                              ? Colors.white
+                              : (isDark ? Colors.white : Colors.black87),
+                        ),
+                      ),
+                    ),
                   );
                 }),
                 IconButton(
                   tooltip: 'Deshacer trazo',
                   onPressed: controller.undo,
-                  icon: const Icon(Icons.undo_rounded, size: 20),
+                  icon: AmodoroTheme.sysIcon(Symbols.undo, size: 18),
                 ),
                 IconButton(
                   tooltip: 'Limpiar lienzo',
                   onPressed: controller.clear,
-                  icon: const Icon(Icons.delete_outline_rounded, size: 20),
+                  icon: AmodoroTheme.sysIcon(Symbols.delete, size: 18),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             Container(
-              height: 230,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFFDF9),
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: const Color(0xFFD6CEC5), width: 1.5),
+              height: 220,
+              decoration: AmodoroTheme.floatingPerspectiveBox(
+                fillColor: const Color(0xFFFFFDF9),
+                isDark: false,
+                borderRadius: 22,
+                thickness: 2.5,
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(21),

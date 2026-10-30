@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../models/amodoro_models.dart';
 import '../services/api_client.dart';
 import '../theme/amodoro_theme.dart';
+import '../widgets/flat_avatar.dart';
+import '../widgets/link_preview_card.dart';
 
 class SentHistoryScreen extends StatelessWidget {
   final List<HomeCardItem> sentCards;
@@ -18,9 +21,13 @@ class SentHistoryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: AmodoroTheme.sysIcon(Symbols.arrow_back, size: 22),
+        ),
         title: const Text(
-          '🕒 Enviados por YO',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+          'ENVIADOS POR YO',
+          style: TextStyle(fontSize: 14, letterSpacing: 1.5),
         ),
       ),
       body: sentCards.isEmpty
@@ -28,15 +35,15 @@ class SentHistoryScreen extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.all(24),
                 child: Text(
-                  'Aún no has enviado tarjetas. Usa el botón + CREAR en HOME para sorprender a tu pareja.',
+                  'Aún no has enviado tarjetas.',
                   textAlign: TextAlign.center,
                 ),
               ),
             )
           : ListView.separated(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(18, 12, 20, 24),
               itemCount: sentCards.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 16),
+              separatorBuilder: (_, __) => const SizedBox(height: 18),
               itemBuilder: (context, index) {
                 final card = sentCards[index];
                 final bg = AmodoroTheme.parseHexColor(card.bgColor);
@@ -45,9 +52,10 @@ class SentHistoryScreen extends StatelessWidget {
 
                 return Container(
                   padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
+                  decoration: AmodoroTheme.floatingPerspectiveBox(
                     color: bg,
-                    borderRadius: BorderRadius.circular(28),
+                    radius: 28,
+                    thickness: 3.0,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -55,71 +63,69 @@ class SentHistoryScreen extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: ink.withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              'YO',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 1.2,
-                                color: ink,
+                          Row(
+                            children: [
+                              FlatAvatarBadge(
+                                avatarId: card.authorAvatarId,
+                                size: 26,
                               ),
-                            ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'YO',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  letterSpacing: 1.3,
+                                  color: ink,
+                                ),
+                              ),
+                            ],
                           ),
                           Text(
                             card.dateHeader,
                             style: TextStyle(
                               fontSize: 11,
-                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.0,
                               color: muted,
                             ),
                           ),
                         ],
                       ),
-                      if (card.mediaType != 'none' &&
+                      if (card.mediaType == 'link' &&
+                          card.linkUrl != null &&
+                          card.linkUrl!.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        LinkPreviewCard(
+                          url: card.linkUrl!,
+                          title: card.linkTitle,
+                          thumbnail: card.linkThumbnail,
+                          platform: card.linkPlatform,
+                          cardBgColor: bg,
+                        ),
+                      ] else if (card.mediaType != 'none' &&
                           card.mediaUrl != null &&
                           card.mediaUrl!.isNotEmpty) ...[
                         const SizedBox(height: 12),
                         ClipRRect(
                           borderRadius: BorderRadius.circular(20),
-                          child: _buildCardMedia(api.resolveMediaUrl(card.mediaUrl)),
+                          child: _buildCardMedia(
+                            api.resolveMediaUrl(card.mediaUrl),
+                          ),
                         ),
                       ],
-                      const SizedBox(height: 14),
-                      Text(
-                        card.textContent,
-                        style: AmodoroTheme.getCardTextStyle(
-                          fontFamily: card.fontFamily,
-                          fontSize: card.fontSize,
-                          color: ink,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Divider(color: ink.withValues(alpha: 0.15)),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Reacciones y respuestas recibidas:',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: muted,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (card.reactions.isEmpty)
+                      if (card.textContent.isNotEmpty) ...[
+                        const SizedBox(height: 14),
                         Text(
-                          'Tu pareja aún no ha reaccionado a esta tarjeta.',
-                          style: TextStyle(fontSize: 12, color: muted),
-                        )
-                      else
+                          card.textContent,
+                          style: AmodoroTheme.getCardTextStyle(
+                            fontFamily: card.fontFamily,
+                            color: ink,
+                            fontSizePx: card.fontSizePx,
+                            fontSizeKey: card.fontSize,
+                          ),
+                        ),
+                      ],
+                      if (card.reactions.isNotEmpty) ...[
+                        const SizedBox(height: 14),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
@@ -133,24 +139,35 @@ class SentHistoryScreen extends StatelessWidget {
                             ].join(' ');
                             return Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
+                                horizontal: 10,
+                                vertical: 5,
                               ),
-                              decoration: BoxDecoration(
-                                color: ink.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(999),
+                              decoration: AmodoroTheme.floatingPerspectiveBox(
+                                color: Colors.white.withValues(alpha: 0.48),
+                                radius: 999,
+                                thickness: 1.8,
                               ),
-                              child: Text(
-                                '${r.authorLabel}: $text',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: ink,
-                                ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  FlatAvatarBadge(
+                                    avatarId: r.authorAvatarId,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '${r.authorLabel}: $text',
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      color: Color(0xFF1F1B18),
+                                    ),
+                                  ),
+                                ],
                               ),
                             );
                           }).toList(),
                         ),
+                      ],
                     ],
                   ),
                 );
