@@ -51,9 +51,10 @@ class AmodoroTheme {
     return GoogleFonts.raleway(
       fontSize: fontSize,
       fontWeight: FontWeight.w500,
-      fontVariations: const [FontVariation('wght', 450)],
       color: color,
       letterSpacing: letterSpacing,
+    ).copyWith(
+      fontVariations: const [FontVariation('wght', 450)],
     );
   }
 
