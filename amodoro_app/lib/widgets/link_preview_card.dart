@@ -20,7 +20,7 @@ class LinkPreviewCard extends StatelessWidget {
     this.platform,
     this.cardBgColor = const Color(0xFFFFDAD6),
     this.onRemove,
-    this.isSquare = false,
+    this.isSquare = true,
   });
 
   String _detectPlatformLabel() {

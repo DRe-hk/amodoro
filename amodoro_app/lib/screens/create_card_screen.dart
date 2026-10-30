@@ -48,6 +48,8 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     {'key': 'mono', 'label': 'FUENTE · MONO'},
   ];
 
+  static const List<int> _sizeOptions = [14, 18, 22, 26, 32];
+
   @override
   void dispose() {
     _textController.dispose();
@@ -382,16 +384,21 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Fila inferior de 3 menús desplegables en cápsulas: FUENTE | COLOR
+              // Fila inferior de 3 menús desplegables en cápsulas: FUENTE | 18 PX | COLOR
               Row(
                 children: [
                   Expanded(
                     flex: 5,
                     child: _buildFontDropdownCapsule(capsuleSurface),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
-                    flex: 5,
+                    flex: 3,
+                    child: _buildSizeDropdownCapsule(capsuleSurface),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 4,
                     child: _buildColorDropdownCapsule(capsuleSurface),
                   ),
                 ],
@@ -718,6 +725,39 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
           }).toList(),
           onChanged: (v) {
             if (v != null) setState(() => _fontFamily = v);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSizeDropdownCapsule(Color surface) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 40),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      decoration: AmodoroTheme.floatingPerspectiveBox(
+        color: surface,
+        radius: 999,
+        thickness: 2.5,
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          value: _fontSizePx,
+          isExpanded: true,
+          icon: AmodoroTheme.sysIcon(Symbols.expand_more, size: 18),
+          style: TextStyle(
+            fontSize: 11,
+            letterSpacing: 1.0,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+          items: _sizeOptions.map((px) {
+            return DropdownMenuItem<int>(
+              value: px,
+              child: Text('$px PX'),
+            );
+          }).toList(),
+          onChanged: (v) {
+            if (v != null) setState(() => _fontSizePx = v);
           },
         ),
       ),

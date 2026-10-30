@@ -105,10 +105,13 @@ class SentHistoryScreen extends StatelessWidget {
                           card.mediaUrl != null &&
                           card.mediaUrl!.isNotEmpty) ...[
                         const SizedBox(height: 12),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(20),
-                          child: _buildCardMedia(
-                            api.resolveMediaUrl(card.mediaUrl),
+                        AspectRatio(
+                          aspectRatio: 1.0,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: _buildCardMedia(
+                              api.resolveMediaUrl(card.mediaUrl),
+                            ),
                           ),
                         ),
                       ],
@@ -184,8 +187,8 @@ class SentHistoryScreen extends StatelessWidget {
           final bytes = base64Decode(url.substring(comma + 1));
           return Image.memory(
             bytes,
-            height: 190,
             width: double.infinity,
+            height: double.infinity,
             fit: BoxFit.cover,
           );
         } catch (_) {}
@@ -193,8 +196,8 @@ class SentHistoryScreen extends StatelessWidget {
     }
     return Image.network(
       url,
-      height: 190,
       width: double.infinity,
+      height: double.infinity,
       fit: BoxFit.cover,
       errorBuilder: (_, __, ___) => const SizedBox.shrink(),
     );

@@ -1096,16 +1096,15 @@ class _BoardsScreenState extends State<BoardsScreen> {
             ),
             const SizedBox(height: 8),
 
-            // Imagen adjunta si existe
+            // Imagen adjunta si existe (cuadrada 1:1 en todos lados)
             if (item.mediaUrl != null && item.mediaUrl!.isNotEmpty) ...[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: Image.network(
-                  widget.api.resolveMediaUrl(item.mediaUrl),
-                  height: 115,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              AspectRatio(
+                aspectRatio: 1.0,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: _buildBoardItemMedia(
+                    widget.api.resolveMediaUrl(item.mediaUrl),
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -1222,6 +1221,30 @@ class _BoardsScreenState extends State<BoardsScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildBoardItemMedia(String url) {
+    if (url.startsWith('data:image/')) {
+      final comma = url.indexOf(',');
+      if (comma != -1) {
+        try {
+          final bytes = base64Decode(url.substring(comma + 1));
+          return Image.memory(
+            bytes,
+            width: double.infinity,
+            height: double.infinity,
+            fit: BoxFit.cover,
+          );
+        } catch (_) {}
+      }
+    }
+    return Image.network(
+      url,
+      width: double.infinity,
+      height: double.infinity,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
     );
   }
 }

@@ -321,9 +321,12 @@ class HomeScreen extends StatelessWidget {
               ] else if (card.mediaType != 'none' &&
                   card.mediaUrl != null &&
                   card.mediaUrl!.isNotEmpty) ...[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: _buildMediaWidget(api.resolveMediaUrl(card.mediaUrl)),
+                AspectRatio(
+                  aspectRatio: 1.0,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: _buildMediaWidget(api.resolveMediaUrl(card.mediaUrl)),
+                  ),
                 ),
                 if (card.textContent.isNotEmpty) const SizedBox(height: 16),
               ],
@@ -453,8 +456,8 @@ class HomeScreen extends StatelessWidget {
           final bytes = base64Decode(url.substring(comma + 1));
           return Image.memory(
             bytes,
-            height: 210,
             width: double.infinity,
+            height: double.infinity,
             fit: BoxFit.cover,
           );
         } catch (_) {}
@@ -462,8 +465,8 @@ class HomeScreen extends StatelessWidget {
     }
     return Image.network(
       url,
-      height: 210,
       width: double.infinity,
+      height: double.infinity,
       fit: BoxFit.cover,
       errorBuilder: (_, __, ___) => const SizedBox.shrink(),
     );
