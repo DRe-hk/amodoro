@@ -194,6 +194,120 @@ export function createHomeCard(input: {
     .get();
 }
 
+export function updateHomeCard(input: {
+  cardId: number;
+  authorId: number;
+  newMediaId?: number | null;
+  keepExistingMedia?: boolean;
+  mediaType?: string;
+  linkUrl?: string | null;
+  linkTitle?: string | null;
+  linkThumbnail?: string | null;
+  linkPlatform?: string | null;
+  body: string;
+  bgColor: string;
+  fontFamily: CardFont;
+  fontSize: CardFontSize;
+  fontSizePx?: number;
+}) {
+  const existing = db
+    .select()
+    .from(homeCards)
+    .where(eq(homeCards.id, input.cardId))
+    .get();
+
+  if (!existing) {
+    throw new Error("Tarjeta no encontrada.");
+  }
+  if (existing.authorId !== input.authorId) {
+    throw new Error("Solo puedes editar las tarjetas que tú enviaste.");
+  }
+
+  const cleanBody = input.body.trim();
+  const cleanLink = input.linkUrl?.trim() || null;
+
+  let finalMediaId: number | null = null;
+  let finalMediaType = "none";
+  let finalLinkUrl: string | null = null;
+  let finalLinkTitle: string | null = null;
+  let finalLinkThumbnail: string | null = null;
+  let finalLinkPlatform: string | null = null;
+
+  if (input.newMediaId != null) {
+    finalMediaId = input.newMediaId;
+    finalMediaType = input.mediaType === "drawing" ? "drawing" : "photo";
+  } else if (input.mediaType === "link" && cleanLink) {
+    finalMediaType = "link";
+    finalLinkUrl = cleanLink;
+    finalLinkTitle = input.linkTitle?.trim() || null;
+    finalLinkThumbnail = input.linkThumbnail?.trim() || null;
+    finalLinkPlatform = input.linkPlatform?.trim() || null;
+  } else if (input.keepExistingMedia && existing.mediaId != null) {
+    finalMediaId = existing.mediaId;
+    finalMediaType =
+      existing.mediaType && existing.mediaType !== "none"
+        ? existing.mediaType
+        : "photo";
+  } else {
+    finalMediaId = null;
+    finalMediaType = "none";
+  }
+
+  if (!cleanBody && !finalMediaId && !finalLinkUrl) {
+    throw new Error("Escribe un mensaje o añade una imagen, dibujo o link.");
+  }
+
+  const sizePx =
+    input.fontSizePx ??
+    (input.fontSize === "sm"
+      ? 14
+      : input.fontSize === "lg"
+        ? 22
+        : input.fontSize === "xl"
+          ? 28
+          : 18);
+
+  return db
+    .update(homeCards)
+    .set({
+      mediaId: finalMediaId,
+      mediaType: finalMediaType,
+      linkUrl: finalLinkUrl,
+      linkTitle: finalLinkTitle,
+      linkThumbnail: finalLinkThumbnail,
+      linkPlatform: finalLinkPlatform,
+      body: cleanBody,
+      bgColor: input.bgColor || existing.bgColor || "#FFDAD6",
+      fontFamily: input.fontFamily || existing.fontFamily || "sans",
+      fontSize: input.fontSize || existing.fontSize || "md",
+      fontSizePx: sizePx,
+    })
+    .where(eq(homeCards.id, input.cardId))
+    .returning()
+    .get();
+}
+
+export function deleteHomeCard(input: { cardId: number; authorId: number }) {
+  const existing = db
+    .select()
+    .from(homeCards)
+    .where(eq(homeCards.id, input.cardId))
+    .get();
+
+  if (!existing) {
+    throw new Error("Tarjeta no encontrada.");
+  }
+  if (existing.authorId !== input.authorId) {
+    throw new Error("Solo puedes eliminar las tarjetas que tú enviaste.");
+  }
+
+  db.delete(homeCardReactions)
+    .where(eq(homeCardReactions.cardId, input.cardId))
+    .run();
+
+  db.delete(homeCards).where(eq(homeCards.id, input.cardId)).run();
+}
+
 export function reactToHomeCard(input: {
   cardId: number;
   userId: number;

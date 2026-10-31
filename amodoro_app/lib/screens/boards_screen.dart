@@ -7,6 +7,7 @@ import '../services/api_client.dart';
 import '../theme/amodoro_theme.dart';
 import '../widgets/decide_sheet.dart';
 import '../widgets/flat_avatar.dart';
+import '../widgets/fullscreen_media_viewer.dart';
 import '../widgets/link_preview_card.dart';
 
 class BoardsScreen extends StatefulWidget {
@@ -1050,6 +1051,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
     final muted = isDark ? AmodoroTheme.darkMuted : AmodoroTheme.lightMuted;
 
     return GestureDetector(
+      onTap: () => _showItemDetailModal(board: board, item: item),
       onLongPress: () => _showItemSubmenu(board: board, existing: item),
       child: Container(
         width: double.infinity,
@@ -1222,6 +1224,312 @@ class _BoardsScreenState extends State<BoardsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _showItemDetailModal({
+    required BoardModel board,
+    required BoardCardItem item,
+  }) async {
+    bool copyingToPendientes = false;
+
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final neutralCardFill =
+            isDark ? AmodoroTheme.darkContainer : AmodoroTheme.lightContainer;
+        final neutralCardOutline =
+            isDark ? const Color(0xFF383E3A) : const Color(0xFFE2DDD4);
+        final chosenEdgeColor = _accentFromHex(item.bgColor);
+        final ink = isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk;
+        final muted = isDark ? AmodoroTheme.darkMuted : AmodoroTheme.lightMuted;
+        final pillFill =
+            isDark ? AmodoroTheme.darkBackground : AmodoroTheme.lightBackground;
+
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 28,
+              ),
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.84,
+                ),
+                padding: const EdgeInsets.all(20),
+                decoration: AmodoroTheme.floatingPerspectiveBox(
+                  color: neutralCardFill,
+                  radius: 26,
+                  thickness: 3.0,
+                  fullBorderColor: neutralCardOutline,
+                  fullBorderWidth: 1.0,
+                  perspectiveEdgeColor: chosenEdgeColor,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header row: Category · Board title + 3-dots & Close X
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${item.categoryTag.toUpperCase()} · ${board.title.toUpperCase()}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              letterSpacing: 1.3,
+                              color: muted,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => Navigator.of(ctx).pop('submenu'),
+                          child: Container(
+                            width: 34,
+                            height: 34,
+                            decoration: AmodoroTheme.floatingPerspectiveBox(
+                              color: pillFill,
+                              radius: 999,
+                              thickness: 1.8,
+                              fullBorderColor: neutralCardOutline,
+                            ),
+                            child: Center(
+                              child: AmodoroTheme.sysIcon(
+                                Symbols.more_horiz,
+                                size: 19,
+                                color: ink,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => Navigator.of(ctx).pop(),
+                          child: Container(
+                            width: 34,
+                            height: 34,
+                            decoration: AmodoroTheme.floatingPerspectiveBox(
+                              color: pillFill,
+                              radius: 999,
+                              thickness: 1.8,
+                              fullBorderColor: neutralCardOutline,
+                            ),
+                            child: Center(
+                              child: AmodoroTheme.sysIcon(
+                                Symbols.close,
+                                size: 19,
+                                color: ink,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Scrollable content
+                    Flexible(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (item.mediaUrl != null &&
+                                item.mediaUrl!.isNotEmpty) ...[
+                              Builder(
+                                builder: (_) {
+                                  final resolvedUrl =
+                                      widget.api.resolveMediaUrl(item.mediaUrl);
+                                  final heroTag =
+                                      'board_detail_media_${item.id}';
+                                  return GestureDetector(
+                                    onTap: () => FullscreenMediaViewer.open(
+                                      ctx,
+                                      imageUrl: resolvedUrl,
+                                      heroTag: heroTag,
+                                    ),
+                                    child: Hero(
+                                      tag: heroTag,
+                                      child: AspectRatio(
+                                        aspectRatio: 1.0,
+                                        child: ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(18),
+                                          child: _buildBoardItemMedia(
+                                            resolvedUrl,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 14),
+                            ],
+                            if (item.url != null && item.url!.isNotEmpty) ...[
+                              LinkPreviewCard(
+                                url: item.url!,
+                                title: item.linkTitle ?? item.title,
+                                thumbnail: item.linkThumbnail,
+                                platform: item.linkPlatform,
+                                cardBgColor: neutralCardFill,
+                              ),
+                              const SizedBox(height: 14),
+                            ],
+                            if (item.title.isNotEmpty || item.emoji.isNotEmpty)
+                              Text(
+                                item.emoji.isNotEmpty
+                                    ? '${item.title} ${item.emoji}'.trim()
+                                    : item.title,
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  color: ink,
+                                  height: 1.3,
+                                ),
+                              ),
+                            if (item.notes.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              SelectableText(
+                                item.notes,
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  color: ink.withValues(alpha: 0.85),
+                                  height: 1.45,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Footer row: Author avatar + PASAR A PENDIENTES
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              FlatAvatarBadge(
+                                avatarId: item.authorAvatarId,
+                                size: 28,
+                                showPerspectiveBorder: true,
+                              ),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  'Añadido por ${item.authorLabel}',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: muted,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (board.slug != 'actividades') ...[
+                          const SizedBox(width: 10),
+                          GestureDetector(
+                            onTap: copyingToPendientes
+                                ? null
+                                : () async {
+                                    setModalState(
+                                      () => copyingToPendientes = true,
+                                    );
+                                    try {
+                                      await widget.api
+                                          .copyToActividades(item.id);
+                                      await widget.onRefresh();
+                                      if (ctx.mounted) {
+                                        Navigator.of(ctx).pop('copied');
+                                      }
+                                    } catch (e) {
+                                      if (ctx.mounted) {
+                                        setModalState(
+                                          () => copyingToPendientes = false,
+                                        );
+                                        ScaffoldMessenger.of(ctx).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              e.toString().replaceFirst(
+                                                    'Exception: ',
+                                                    '',
+                                                  ),
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: AmodoroTheme.floatingPerspectiveBox(
+                                color: pillFill,
+                                radius: 999,
+                                thickness: 2.0,
+                                fullBorderColor: neutralCardOutline,
+                                perspectiveEdgeColor: chosenEdgeColor,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  AmodoroTheme.sysIcon(
+                                    Symbols.schedule,
+                                    size: 15,
+                                    color: ink,
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    copyingToPendientes
+                                        ? 'PASANDO...'
+                                        : 'PASAR A PENDIENTES',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      letterSpacing: 0.9,
+                                      color: ink,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (!mounted) return;
+    if (action == 'submenu') {
+      await _showItemSubmenu(board: board, existing: item);
+    } else if (action == 'copied') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pasado al tablero PENDIENTES'),
+        ),
+      );
+    }
   }
 
   Widget _buildBoardItemMedia(String url) {

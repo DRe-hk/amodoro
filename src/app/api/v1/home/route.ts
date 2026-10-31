@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { db } from "@/db";
 import { media, type CardFont, type CardFontSize } from "@/db/schema";
 import { CORS_HEADERS, getApiUser, jsonResponse } from "@/lib/api-auth";
-import { createHomeCard, reactToHomeCard } from "@/lib/home-cards";
+import {
+  createHomeCard,
+  deleteHomeCard,
+  reactToHomeCard,
+  updateHomeCard,
+} from "@/lib/home-cards";
 import { fetchLinkPreview } from "@/lib/link-preview";
 import { UPLOADS_PATH } from "@/lib/media";
 
@@ -70,7 +75,7 @@ export async function POST(request: Request) {
 
   try {
     const payload = (await request.json()) as {
-      action: "create_card" | "react";
+      action: "create_card" | "update_card" | "delete_card" | "react";
       body?: string;
       textContent?: string;
       bgColor?: string;
@@ -78,6 +83,7 @@ export async function POST(request: Request) {
       fontSize?: CardFontSize;
       fontSizePx?: number;
       mediaType?: string;
+      keepExistingMedia?: boolean;
       imageBase64?: string | null;
       mediaDataUrl?: string | null;
       imageMime?: string;
@@ -136,6 +142,72 @@ export async function POST(request: Request) {
       });
 
       return jsonResponse({ ok: true, card });
+    }
+
+    if (payload.action === "update_card") {
+      const cardId = Number(payload.cardId);
+      if (!Number.isInteger(cardId)) {
+        return jsonResponse({ ok: false, error: "cardId inválido" }, 400);
+      }
+
+      const rawBase64 =
+        payload.imageBase64?.trim() || payload.mediaDataUrl?.trim() || "";
+      let newMediaId: number | null = null;
+      if (rawBase64) {
+        newMediaId = await storeBase64Media({
+          base64: rawBase64,
+          mime: payload.imageMime,
+          kind:
+            payload.mediaKind ??
+            (payload.mediaType === "drawing" ? "drawing" : "image"),
+          ownerId: user.id,
+        });
+      }
+
+      const rawLink = payload.linkUrl?.trim() || "";
+      let linkTitle = payload.linkTitle?.trim() || null;
+      let linkThumbnail = payload.linkThumbnail?.trim() || null;
+      let linkPlatform = payload.linkPlatform?.trim() || null;
+
+      if (payload.mediaType === "link" && rawLink && !linkTitle) {
+        const preview = await fetchLinkPreview(rawLink);
+        linkTitle = preview.title;
+        linkThumbnail = preview.thumbnail;
+        linkPlatform = preview.platform;
+      }
+
+      const textBody = (payload.body ?? payload.textContent ?? "").trim();
+
+      const card = updateHomeCard({
+        cardId,
+        authorId: user.id,
+        newMediaId,
+        keepExistingMedia: payload.keepExistingMedia === true,
+        mediaType: payload.mediaType,
+        linkUrl: rawLink || null,
+        linkTitle,
+        linkThumbnail,
+        linkPlatform,
+        body: textBody,
+        bgColor: payload.bgColor ?? "#FFDAD6",
+        fontFamily: payload.fontFamily ?? "sans",
+        fontSize: payload.fontSize ?? "md",
+        fontSizePx: payload.fontSizePx,
+      });
+
+      return jsonResponse({ ok: true, card });
+    }
+
+    if (payload.action === "delete_card") {
+      const cardId = Number(payload.cardId);
+      if (!Number.isInteger(cardId)) {
+        return jsonResponse({ ok: false, error: "cardId inválido" }, 400);
+      }
+      deleteHomeCard({
+        cardId,
+        authorId: user.id,
+      });
+      return jsonResponse({ ok: true });
     }
 
     if (payload.action === "react") {

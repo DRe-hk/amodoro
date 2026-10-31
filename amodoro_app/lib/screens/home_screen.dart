@@ -5,6 +5,7 @@ import '../models/amodoro_models.dart';
 import '../services/api_client.dart';
 import '../theme/amodoro_theme.dart';
 import '../widgets/flat_avatar.dart';
+import '../widgets/fullscreen_media_viewer.dart';
 import '../widgets/glass_bubble_background.dart';
 import '../widgets/link_preview_card.dart';
 import 'create_card_screen.dart';
@@ -120,6 +121,8 @@ class HomeScreen extends StatelessWidget {
                         builder: (_) => SentHistoryScreen(
                           sentCards: sync.sentHistory,
                           api: api,
+                          onRefresh: onRefresh,
+                          partnerNickname: partnerName,
                         ),
                       ),
                     );
@@ -321,11 +324,26 @@ class HomeScreen extends StatelessWidget {
               ] else if (card.mediaType != 'none' &&
                   card.mediaUrl != null &&
                   card.mediaUrl!.isNotEmpty) ...[
-                AspectRatio(
-                  aspectRatio: 1.0,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: _buildMediaWidget(api.resolveMediaUrl(card.mediaUrl)),
+                GestureDetector(
+                  onTap: () {
+                    final resolvedUrl = api.resolveMediaUrl(card.mediaUrl);
+                    final heroTag = 'home_media_${card.id}';
+                    FullscreenMediaViewer.open(
+                      context,
+                      imageUrl: resolvedUrl,
+                      heroTag: heroTag,
+                    );
+                  },
+                  child: AspectRatio(
+                    aspectRatio: 1.0,
+                    child: Hero(
+                      tag: 'home_media_${card.id}',
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: _buildMediaWidget(
+                            api.resolveMediaUrl(card.mediaUrl)),
+                      ),
+                    ),
                   ),
                 ),
                 if (card.textContent.isNotEmpty) const SizedBox(height: 16),

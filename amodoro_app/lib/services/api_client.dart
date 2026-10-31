@@ -200,6 +200,69 @@ class AmodoroApiClient {
     }
   }
 
+  Future<void> updateHomeCard({
+    required String cardId,
+    required String textContent,
+    required String bgColor,
+    required String fontFamily,
+    required String fontSize,
+    required int fontSizePx,
+    required String mediaType,
+    bool keepExistingMedia = false,
+    String? mediaDataUrl,
+    String? linkUrl,
+    String? linkTitle,
+    String? linkThumbnail,
+    String? linkPlatform,
+  }) async {
+    final res = await http
+        .post(
+          Uri.parse('$_baseUrl/api/v1/home'),
+          headers: _headers(),
+          body: jsonEncode({
+            'action': 'update_card',
+            'cardId': cardId,
+            'body': textContent,
+            'textContent': textContent,
+            'bgColor': bgColor,
+            'fontFamily': fontFamily,
+            'fontSize': fontSize,
+            'fontSizePx': fontSizePx,
+            'mediaType': mediaType,
+            'keepExistingMedia': keepExistingMedia,
+            'imageBase64': mediaDataUrl ?? '',
+            'mediaDataUrl': mediaDataUrl ?? '',
+            'mediaKind': mediaType == 'drawing' ? 'drawing' : 'image',
+            'linkUrl': linkUrl ?? '',
+            'linkTitle': linkTitle ?? '',
+            'linkThumbnail': linkThumbnail ?? '',
+            'linkPlatform': linkPlatform ?? '',
+          }),
+        )
+        .timeout(const Duration(seconds: 25));
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode >= 400 || body['ok'] != true) {
+      throw Exception(body['error'] ?? 'Error al actualizar tarjeta');
+    }
+  }
+
+  Future<void> deleteHomeCard(String cardId) async {
+    final res = await http
+        .post(
+          Uri.parse('$_baseUrl/api/v1/home'),
+          headers: _headers(),
+          body: jsonEncode({
+            'action': 'delete_card',
+            'cardId': cardId,
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode >= 400 || body['ok'] != true) {
+      throw Exception(body['error'] ?? 'Error al eliminar tarjeta');
+    }
+  }
+
   Future<void> reactToCard({
     required String cardId,
     String? emoji,

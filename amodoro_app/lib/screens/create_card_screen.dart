@@ -11,11 +11,13 @@ import '../widgets/link_preview_card.dart';
 class CreateCardScreen extends StatefulWidget {
   final AmodoroApiClient api;
   final String partnerNickname;
+  final HomeCardItem? existingCard;
 
   const CreateCardScreen({
     super.key,
     required this.api,
     required this.partnerNickname,
+    this.existingCard,
   });
 
   @override
@@ -28,11 +30,14 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   final ImagePicker _picker = ImagePicker();
 
   // 'none' = cuadrícula de 4 opciones (si no elige ninguna o cancela, se envía solo texto)
+  // 'existing_media' = imagen o dibujo existente de una tarjeta enviada
   // 'photo' = foto tomada o imagen elegida
   // 'drawing' = lienzo de dibujo activo
   // 'link' = link embebido con vista previa
   String _mediaMode = 'none';
   String? _imageDataUrl;
+  String? _existingRemoteMediaUrl;
+  String _existingRemoteMediaType = 'photo';
   LinkPreviewModel? _linkPreview;
 
   String _bgColor = '#FFDAD6';
@@ -49,6 +54,46 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   ];
 
   static const List<int> _sizeOptions = [14, 18, 22, 26, 32];
+
+  @override
+  void initState() {
+    super.initState();
+    final card = widget.existingCard;
+    if (card != null) {
+      _textController.text = card.textContent;
+      _bgColor = card.bgColor;
+      for (final preset in AmodoroTheme.pastelPresets) {
+        if (preset.hex.toUpperCase() == card.bgColor.trim().toUpperCase()) {
+          _bgColor = preset.hex;
+          break;
+        }
+      }
+      _fontFamily = _fontOptions.any((o) => o['key'] == card.fontFamily)
+          ? card.fontFamily
+          : 'sans';
+      _fontSizePx =
+          _sizeOptions.contains(card.fontSizePx) ? card.fontSizePx : 18;
+      if (card.mediaType == 'link' &&
+          card.linkUrl != null &&
+          card.linkUrl!.isNotEmpty) {
+        _mediaMode = 'link';
+        _linkPreview = LinkPreviewModel(
+          url: card.linkUrl!,
+          title: (card.linkTitle != null && card.linkTitle!.isNotEmpty)
+              ? card.linkTitle!
+              : card.linkUrl!,
+          thumbnail: card.linkThumbnail,
+          platform: card.linkPlatform ?? 'Web',
+        );
+      } else if (card.mediaType != 'none' &&
+          card.mediaUrl != null &&
+          card.mediaUrl!.isNotEmpty) {
+        _mediaMode = 'existing_media';
+        _existingRemoteMediaUrl = widget.api.resolveMediaUrl(card.mediaUrl);
+        _existingRemoteMediaType = card.mediaType;
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -76,6 +121,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
           _imageDataUrl = 'data:image/$ext;base64,${base64Encode(bytes)}';
           _mediaMode = 'photo';
           _linkPreview = null;
+          _existingRemoteMediaUrl = null;
         });
       }
     } catch (_) {
@@ -88,6 +134,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       _mediaMode = 'drawing';
       _imageDataUrl = null;
       _linkPreview = null;
+      _existingRemoteMediaUrl = null;
     });
   }
 
@@ -97,6 +144,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       _mediaMode = 'none';
       _imageDataUrl = null;
       _linkPreview = null;
+      _existingRemoteMediaUrl = null;
     });
   }
 
@@ -212,6 +260,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
           _linkPreview = preview;
           _mediaMode = 'link';
           _imageDataUrl = null;
+          _existingRemoteMediaUrl = null;
         });
       }
     } catch (_) {
@@ -224,6 +273,8 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
             platform: 'Web',
           );
           _mediaMode = 'link';
+          _imageDataUrl = null;
+          _existingRemoteMediaUrl = null;
         });
       }
     }
@@ -261,10 +312,15 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       linkPlatform = _linkPreview!.platform;
     }
 
+    final keepExisting = widget.existingCard != null &&
+        _mediaMode == 'existing_media' &&
+        _existingRemoteMediaUrl != null;
+
     // Si no eligió ninguna opción (o cerró/canceló el lienzo/foto) y escribió texto, se sube solo texto
-    if (text.isEmpty &&
-        finalMediaDataUrl == null &&
-        (linkUrl == null || linkUrl.isEmpty)) {
+    if (!(text.isNotEmpty ||
+        finalMediaDataUrl != null ||
+        finalMediaType == 'link' ||
+        keepExisting)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -274,21 +330,42 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       return;
     }
 
+    final fontSizeKey = _sizeKeyFromPx(_fontSizePx);
     setState(() => _sending = true);
     try {
-      await widget.api.createHomeCard(
-        textContent: text,
-        bgColor: _bgColor,
-        fontFamily: _fontFamily,
-        fontSize: _sizeKeyFromPx(_fontSizePx),
-        fontSizePx: _fontSizePx,
-        mediaType: finalMediaType,
-        mediaDataUrl: finalMediaDataUrl,
-        linkUrl: linkUrl,
-        linkTitle: linkTitle,
-        linkThumbnail: linkThumbnail,
-        linkPlatform: linkPlatform,
-      );
+      if (widget.existingCard != null) {
+        await widget.api.updateHomeCard(
+          cardId: widget.existingCard!.id,
+          textContent: text,
+          bgColor: _bgColor,
+          fontFamily: _fontFamily,
+          fontSize: fontSizeKey,
+          fontSizePx: _fontSizePx,
+          mediaType: keepExisting ? _existingRemoteMediaType : finalMediaType,
+          keepExistingMedia: keepExisting,
+          mediaDataUrl: finalMediaDataUrl,
+          linkUrl: finalMediaType == 'link' ? _linkPreview?.url : null,
+          linkTitle: finalMediaType == 'link' ? _linkPreview?.title : null,
+          linkThumbnail:
+              finalMediaType == 'link' ? _linkPreview?.thumbnail : null,
+          linkPlatform:
+              finalMediaType == 'link' ? _linkPreview?.platform : null,
+        );
+      } else {
+        await widget.api.createHomeCard(
+          textContent: text,
+          bgColor: _bgColor,
+          fontFamily: _fontFamily,
+          fontSize: fontSizeKey,
+          fontSizePx: _fontSizePx,
+          mediaType: finalMediaType,
+          mediaDataUrl: finalMediaDataUrl,
+          linkUrl: linkUrl,
+          linkTitle: linkTitle,
+          linkThumbnail: linkThumbnail,
+          linkPlatform: linkPlatform,
+        );
+      }
       if (mounted) {
         Navigator.of(context).pop(true);
       }
@@ -307,6 +384,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isEditing = widget.existingCard != null;
     final cardColor = AmodoroTheme.parseHexColor(_bgColor);
     final cardInk = AmodoroTheme.getContrastingInk(cardColor);
     final cardMuted = AmodoroTheme.getContrastingMutedInk(cardColor);
@@ -341,7 +419,18 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 12),
+              Center(
+                child: Text(
+                  isEditing ? 'EDITAR TARJETA' : 'NUEVA TARJETA',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    letterSpacing: 1.5,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
 
               // Tarjeta principal donde se elige la opción superior y se edita el texto directamente sobre ella
               Container(
@@ -422,9 +511,11 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                   ),
                   child: Center(
                     child: Text(
-                      _sending
-                          ? 'PUBLICANDO...'
-                          : 'ENVIAR A ${widget.partnerNickname.toUpperCase()}',
+                      isEditing
+                          ? (_sending ? 'GUARDANDO...' : 'GUARDAR CAMBIOS')
+                          : (_sending
+                              ? 'PUBLICANDO...'
+                              : 'ENVIAR A ${widget.partnerNickname.toUpperCase()}'),
                       style: TextStyle(
                         fontSize: 12.5,
                         letterSpacing: 1.5,
@@ -440,6 +531,30 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildExistingMediaPreview(String url) {
+    if (url.startsWith('data:image/')) {
+      final comma = url.indexOf(',');
+      if (comma != -1) {
+        try {
+          final bytes = base64Decode(url.substring(comma + 1));
+          return Image.memory(
+            bytes,
+            width: double.infinity,
+            height: double.infinity,
+            fit: BoxFit.cover,
+          );
+        } catch (_) {}
+      }
+    }
+    return Image.network(
+      url,
+      width: double.infinity,
+      height: double.infinity,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
     );
   }
 
@@ -474,6 +589,29 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
               style: TextStyle(color: canvasInk),
             ),
           ),
+        ),
+      );
+    }
+
+    if (_mediaMode == 'existing_media' && _existingRemoteMediaUrl != null) {
+      return AspectRatio(
+        aspectRatio: 1.0,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: Container(
+                color: canvasOuterColor,
+                child: _buildExistingMediaPreview(_existingRemoteMediaUrl!),
+              ),
+            ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: _buildCancelMediaChip(),
+            ),
+          ],
         ),
       );
     }
@@ -765,6 +903,59 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   }
 
   Widget _buildColorDropdownCapsule(Color surface) {
+    final hasPreset = AmodoroTheme.pastelPresets.any((p) => p.hex == _bgColor);
+    final items = <DropdownMenuItem<String>>[
+      if (!hasPreset)
+        DropdownMenuItem<String>(
+          value: _bgColor,
+          child: Row(
+            children: [
+              Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: AmodoroTheme.parseHexColor(_bgColor),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Expanded(
+                child: Text(
+                  'ACTUAL',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 10.5),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ...AmodoroTheme.pastelPresets.map((preset) {
+        return DropdownMenuItem<String>(
+          value: preset.hex,
+          child: Row(
+            children: [
+              Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: preset.color,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  preset.name.toUpperCase(),
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10.5),
+                ),
+              ),
+            ],
+          ),
+        );
+      }),
+    ];
+
     return Container(
       constraints: const BoxConstraints(minHeight: 40),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
@@ -783,31 +974,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
             letterSpacing: 1.0,
             color: Theme.of(context).colorScheme.onSurface,
           ),
-          items: AmodoroTheme.pastelPresets.map((preset) {
-            return DropdownMenuItem<String>(
-              value: preset.hex,
-              child: Row(
-                children: [
-                  Container(
-                    width: 14,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: preset.color,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      preset.name.toUpperCase(),
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 10.5),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
+          items: items,
           onChanged: (v) {
             if (v != null) setState(() => _bgColor = v);
           },
