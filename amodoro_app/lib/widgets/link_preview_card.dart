@@ -76,9 +76,9 @@ class LinkPreviewCard extends StatelessWidget {
       child: Container(
         decoration: AmodoroTheme.cardOutlineBox(
           color: cardBg,
-          radius: 22,
+          radius: 28,
           borderColor: borderColor,
-          borderWidth: 2.0,
+          borderWidth: 2.5,
           subtleShadow: false,
         ),
         clipBehavior: Clip.antiAlias,
@@ -192,7 +192,7 @@ class LinkPreviewCard extends StatelessWidget {
                         color: AmodoroTheme.coralPillLight,
                         lipColor: AmodoroTheme.coralPillBorderLight,
                         lipHeight: 3.0,
-                        radius: 14,
+                        radius: 999,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
                           vertical: 6,
@@ -232,7 +232,7 @@ class LinkPreviewCard extends StatelessWidget {
                   color: const Color(0xFFFCF9F5),
                   lipColor: const Color(0xFFDCD6CE),
                   lipHeight: 2.0,
-                  radius: 99,
+                  radius: 999,
                   width: 32,
                   height: 32,
                   child: Center(

@@ -38,6 +38,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   late final PageController _pageController;
   int _activeIndex = 0;
+  int? _pressedNavIndex;
   SyncPayload? _sync;
   bool _loading = false;
   String? _error;
@@ -273,7 +274,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 padding: const EdgeInsets.all(22),
                 decoration: AmodoroTheme.cardOutlineBox(
                   color: cardBg,
-                  radius: 32,
+                  radius: 34,
                   borderColor: borderColor,
                   borderWidth: 2.5,
                 ),
@@ -403,6 +404,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                             },
                       color: Colors.transparent,
                       lipHeight: 0,
+                      radius: 999,
                       height: 48,
                       child: Text(
                         'ABRIR EDITOR DE TARJETA',
@@ -567,45 +569,107 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             // Top Navigation Capsules (HOME, BOARDS, SETTINGS)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
-              child: Row(
-                children: List.generate(_tabs.length, (i) {
-                  final isSelected = i == _activeIndex;
-                  return Expanded(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 48),
-                      child: Center(
-                        child: AmodoroPressableButton(
-                          onTap: () => _jumpToTab(i),
-                          color: isSelected
-                              ? AmodoroTheme.coralPillLight
-                              : Colors.transparent,
-                          lipColor: isSelected
-                              ? AmodoroTheme.coralPillBorderLight
-                              : Colors.transparent,
-                          lipHeight: isSelected ? 3.5 : 0.0,
-                          radius: 999,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 18,
-                            vertical: 8,
-                          ),
-                          child: Text(
-                            _tabs[i],
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AmodoroTheme.googleSans(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.3,
-                              color: isSelected
-                                  ? Colors.white
-                                  : const Color(0xFF9B8E8E),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final maxWidth = constraints.maxWidth;
+                  final slotWidth = maxWidth / _tabs.length;
+
+                  return AnimatedBuilder(
+                    animation: _pageController,
+                    builder: (context, _) {
+                      double page = _activeIndex.toDouble();
+                      if (_pageController.hasClients &&
+                          _pageController.positions.length == 1 &&
+                          _pageController.position.haveDimensions &&
+                          _pageController.page != null) {
+                        page = _pageController.page!.clamp(
+                          0.0,
+                          (_tabs.length - 1).toDouble(),
+                        );
+                      }
+
+                      return SizedBox(
+                        height: 48,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Positioned(
+                              left: page * slotWidth + 6.0,
+                              top: 6.0,
+                              width: slotWidth - 12.0,
+                              height: 36.0,
+                              child: Transform.translate(
+                                offset: Offset(
+                                  0,
+                                  _pressedNavIndex != null ? 3.5 : 0.0,
+                                ),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? AmodoroTheme.coralPillDark
+                                        : AmodoroTheme.coralPillLight,
+                                    borderRadius: BorderRadius.circular(999),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: isDark
+                                            ? AmodoroTheme.coralPillBorderDark
+                                            : AmodoroTheme.coralPillBorderLight,
+                                        offset: Offset(
+                                          0,
+                                          _pressedNavIndex != null ? 0.0 : 3.5,
+                                        ),
+                                        blurRadius: 0,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
+                            Positioned.fill(
+                              child: Row(
+                                children: List.generate(_tabs.length, (i) {
+                                  final double selectWeight =
+                                      (1.0 - (page - i).abs()).clamp(0.0, 1.0);
+                                  final Color labelColor = Color.lerp(
+                                    const Color(0xFF9B8E8E),
+                                    Colors.white,
+                                    selectWeight,
+                                  )!;
+
+                                  return Expanded(
+                                    child: GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTapDown: (_) =>
+                                          setState(() => _pressedNavIndex = i),
+                                      onTapUp: (_) =>
+                                          setState(() => _pressedNavIndex = null),
+                                      onTapCancel: () =>
+                                          setState(() => _pressedNavIndex = null),
+                                      onTap: () => _jumpToTab(i),
+                                      child: Center(
+                                        child: Text(
+                                          _tabs[i],
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: AmodoroTheme.googleSans(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 1.3,
+                                            color: labelColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   );
-                }),
+                },
               ),
             ),
 

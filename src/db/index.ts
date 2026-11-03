@@ -110,6 +110,17 @@ function bootstrapSchema(sqlite: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS home_card_reactions_card_idx ON home_card_reactions(card_id);
 
+    CREATE TABLE IF NOT EXISTS home_card_replies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      card_id INTEGER NOT NULL REFERENCES home_cards(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      text_content TEXT NOT NULL DEFAULT '',
+      media_type TEXT NOT NULL DEFAULT 'none',
+      media_id INTEGER REFERENCES media(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_home_card_replies_card_id ON home_card_replies(card_id);
+
     CREATE TABLE IF NOT EXISTS boards (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       slug TEXT NOT NULL,

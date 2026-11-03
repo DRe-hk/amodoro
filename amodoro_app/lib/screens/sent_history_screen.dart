@@ -88,7 +88,7 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
           }
           break;
         case 'CON REACCIÓN':
-          if (card.reactions.isEmpty) return false;
+          if (card.reactions.isEmpty && card.replies.isEmpty) return false;
           break;
         case 'TODAS':
         default:
@@ -103,7 +103,14 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
         final matchesLink = (card.linkTitle ?? '').toLowerCase().contains(q) ||
             (card.linkUrl ?? '').toLowerCase().contains(q);
         final matchesDate = card.dateHeader.toLowerCase().contains(q);
-        if (!matchesText && !matchesAlt && !matchesLink && !matchesDate) {
+        final matchesReplies = card.replies.any(
+          (r) => r.textContent.toLowerCase().contains(q),
+        );
+        if (!matchesText &&
+            !matchesAlt &&
+            !matchesLink &&
+            !matchesDate &&
+            !matchesReplies) {
           return false;
         }
       }
@@ -161,7 +168,7 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
               decoration: AmodoroTheme.cardOutlineBox(
                 color: surface,
-                radius: 28,
+                radius: 36,
                 borderColor: borderCol,
                 borderWidth: 2.5,
               ),
@@ -183,9 +190,9 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
                       ),
                       AmodoroPressableButton(
                         onTap: () => Navigator.of(sheetCtx).pop(),
-                        width: 34,
-                        height: 34,
-                        radius: 12,
+                        width: 36,
+                        height: 36,
+                        radius: 999,
                         color: boxSurface,
                         borderColor: borderCol,
                         borderWidth: 1.5,
@@ -205,7 +212,7 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
                   AmodoroPressableButton(
                     onTap: () => Navigator.of(sheetCtx).pop('edit'),
                     height: 48,
-                    radius: 16,
+                    radius: 999,
                     color: boxSurface,
                     borderColor: borderCol,
                     borderWidth: 1.5,
@@ -238,7 +245,7 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
                   AmodoroPressableButton(
                     onTap: () => Navigator.of(sheetCtx).pop('delete'),
                     height: 48,
-                    radius: 16,
+                    radius: 999,
                     color: const Color(0xFFFFDAD6),
                     borderColor: AmodoroTheme.coralPillLight,
                     borderWidth: 1.5,
@@ -314,7 +321,7 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
             padding: const EdgeInsets.all(22),
             decoration: AmodoroTheme.cardOutlineBox(
               color: surface,
-              radius: 28,
+              radius: 36,
               borderColor: borderCol,
               borderWidth: 2.5,
             ),
@@ -339,7 +346,7 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
                       child: AmodoroPressableButton(
                         onTap: () => Navigator.of(dialogCtx).pop(false),
                         height: 46,
-                        radius: 16,
+                        radius: 999,
                         color: boxSurface,
                         borderColor: borderCol,
                         borderWidth: 1.5,
@@ -363,7 +370,7 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
                       child: AmodoroPressableButton(
                         onTap: () => Navigator.of(dialogCtx).pop(true),
                         height: 46,
-                        radius: 16,
+                        radius: 999,
                         color: isDark
                             ? AmodoroTheme.coralPillDark
                             : AmodoroTheme.coralPillLight,
@@ -428,7 +435,7 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Top Header with AmodoroPressableButton back button
+            // Top Header with circular AmodoroPressableButton back button
             Padding(
               padding: const EdgeInsets.fromLTRB(18, 12, 20, 8),
               child: Row(
@@ -436,8 +443,8 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
                   AmodoroPressableButton(
                     onTap: () => Navigator.of(context).pop(),
                     width: 42,
-                    height: 40,
-                    radius: 14,
+                    height: 42,
+                    radius: 999,
                     color: isDark
                         ? AmodoroTheme.darkContainer
                         : const Color(0xFFF6EFE6),
@@ -467,14 +474,14 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
               ),
             ),
 
-            // Search & Filter Bar (Requirement F6)
+            // Search Bar (radius: 999)
             Padding(
               padding: const EdgeInsets.fromLTRB(18, 6, 20, 8),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: AmodoroTheme.cardOutlineBox(
                   color: boxSurface,
-                  radius: 18,
+                  radius: 999,
                   borderColor: borderCol,
                   borderWidth: 2.0,
                   subtleShadow: false,
@@ -523,7 +530,7 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
               ),
             ),
 
-            // Horizontal Filter Chips using AmodoroPressableButton
+            // Horizontal Filter Chips using AmodoroPressableButton (radius: 999)
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.fromLTRB(18, 2, 20, 12),
@@ -535,8 +542,8 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
                     child: AmodoroPressableButton(
                       onTap: () => setState(() => _selectedFilter = filter),
                       height: 36,
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      radius: 14,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      radius: 999,
                       color: isSelected
                           ? (isDark
                               ? AmodoroTheme.coralPillDark
@@ -589,7 +596,7 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
                       child: ListView.separated(
                         padding: const EdgeInsets.fromLTRB(18, 6, 20, 24),
                         itemCount: filtered.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 18),
+                        separatorBuilder: (_, __) => const SizedBox(height: 22),
                         itemBuilder: (context, index) {
                           final card = filtered[index];
                           final cardColor =
@@ -598,224 +605,246 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
                               AmodoroTheme.getContrastingInk(cardColor);
                           final muted =
                               AmodoroTheme.getContrastingMutedInk(cardColor);
+                          final cardBorderColor =
+                              AmodoroTheme.darkenForPerspective(
+                            cardColor,
+                            0.12,
+                          );
 
-                          // Sent Card is a container: AmodoroTheme.cardOutlineBox (NO 3D bottom lip)
-                          return Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: AmodoroTheme.cardOutlineBox(
-                              color: cardColor,
-                              radius: 28,
-                              borderColor: AmodoroTheme.darkenForPerspective(
-                                cardColor,
-                                0.12,
-                              ),
-                              borderWidth: 2.5,
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                          final emojiReactions = card.reactions
+                              .where(
+                                (r) =>
+                                    r.emoji != null &&
+                                    r.emoji!.trim().isNotEmpty,
+                              )
+                              .toList();
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Sent Card Container: radius 36, borderWidth 3.0
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: AmodoroTheme.cardOutlineBox(
+                                  color: cardColor,
+                                  radius: 36,
+                                  borderColor: cardBorderColor,
+                                  borderWidth: 3.0,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
-                                        _buildFlatAvatarBorderOnly(
-                                          card.authorAvatarId,
-                                          size: 34,
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Text(
-                                          'YO',
-                                          style: AmodoroTheme.googleSans(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 0.6,
-                                            color: ink,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          card.dateHeader.toUpperCase(),
-                                          style: AmodoroTheme.googleSans(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            letterSpacing: 0.8,
-                                            color: muted,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        AmodoroPressableButton(
-                                          onTap: () => _openCardSubmenu(card),
-                                          width: 34,
-                                          height: 32,
-                                          radius: 12,
-                                          color: Colors.white.withValues(
-                                            alpha: 0.72,
-                                          ),
-                                          borderColor: AmodoroTheme
-                                              .darkenForPerspective(
-                                            cardColor,
-                                            0.14,
-                                          ),
-                                          borderWidth: 1.5,
-                                          lipColor: AmodoroTheme
-                                              .darkenForPerspective(
-                                            cardColor,
-                                            0.22,
-                                          ),
-                                          lipHeight: 2.2,
-                                          child: AmodoroTheme.sysIcon(
-                                            Symbols.more_horiz,
-                                            size: 19,
-                                            color: AmodoroTheme.lightInk,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                if (card.mediaType == 'link' &&
-                                    card.linkUrl != null &&
-                                    card.linkUrl!.isNotEmpty) ...[
-                                  const SizedBox(height: 14),
-                                  LinkPreviewCard(
-                                    url: card.linkUrl!,
-                                    title: card.linkTitle,
-                                    thumbnail: card.linkThumbnail,
-                                    platform: card.linkPlatform,
-                                    cardBgColor: cardColor,
-                                  ),
-                                ] else if (card.mediaType != 'none' &&
-                                    card.mediaUrl != null &&
-                                    card.mediaUrl!.isNotEmpty) ...[
-                                  const SizedBox(height: 14),
-                                  Builder(
-                                    builder: (context) {
-                                      final resolvedUrl = widget.api
-                                          .resolveMediaUrl(card.mediaUrl);
-                                      final heroTag = 'sent_media_${card.id}';
-                                      return GestureDetector(
-                                        onTap: () =>
-                                            FullscreenMediaViewer.open(
-                                          context,
-                                          imageUrl: resolvedUrl,
-                                          heroTag: heroTag,
-                                        ),
-                                        child: AspectRatio(
-                                          aspectRatio: 1.0,
-                                          child: Container(
-                                            decoration: BoxDecoration(
-                                              borderRadius:
-                                                  BorderRadius.circular(24),
-                                              border: Border.all(
-                                                color: Colors.white.withValues(
-                                                  alpha: 0.65,
-                                                ),
-                                                width: 2.0,
+                                        Row(
+                                          children: [
+                                            _buildFlatAvatarBorderOnly(
+                                              card.authorAvatarId,
+                                              size: 34,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Text(
+                                              'YO',
+                                              style: AmodoroTheme.googleSans(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w800,
+                                                letterSpacing: 0.6,
+                                                color: ink,
                                               ),
                                             ),
-                                            child: ClipRRect(
-                                              borderRadius:
-                                                  BorderRadius.circular(22),
-                                              child: Hero(
-                                                tag: heroTag,
-                                                child: _buildCardMedia(
-                                                  resolvedUrl,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
+                                          ],
                                         ),
-                                      );
-                                    },
-                                  ),
-                                  if (card.altText != null &&
-                                      card.altText!.trim().isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      card.altText!.trim(),
-                                      style: AmodoroTheme.googleSans(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: muted,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                                if (card.textContent.isNotEmpty) ...[
-                                  const SizedBox(height: 14),
-                                  Text(
-                                    card.textContent,
-                                    style: AmodoroTheme.getCardTextStyle(
-                                      fontFamily: card.fontFamily,
-                                      color: ink,
-                                      fontSizePx: card.fontSizePx,
-                                      fontSizeKey: card.fontSize,
-                                    ),
-                                  ),
-                                ],
-                                if (card.reactions.isNotEmpty) ...[
-                                  const SizedBox(height: 14),
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: card.reactions.map((r) {
-                                      final text = [
-                                        if (r.emoji != null &&
-                                            r.emoji!.isNotEmpty)
-                                          r.emoji!,
-                                        if (r.presetText != null &&
-                                            r.presetText!.isNotEmpty)
-                                          r.presetText!,
-                                      ].join(' ');
-                                      return Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 5,
-                                        ),
-                                        decoration: AmodoroTheme.cardOutlineBox(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.65,
-                                          ),
-                                          radius: 999,
-                                          borderColor: AmodoroTheme
-                                              .darkenForPerspective(
-                                            cardColor,
-                                            0.14,
-                                          ),
-                                          borderWidth: 1.5,
-                                          subtleShadow: false,
-                                        ),
-                                        child: Row(
+                                        Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            FlatAvatarBadge(
-                                              avatarId: r.authorAvatarId,
-                                              size: 18,
-                                              showPerspectiveBorder: false,
-                                            ),
-                                            const SizedBox(width: 6),
                                             Text(
-                                              '${r.authorLabel}: $text',
+                                              card.dateHeader.toUpperCase(),
                                               style: AmodoroTheme.googleSans(
-                                                fontSize: 11.5,
+                                                fontSize: 11,
                                                 fontWeight: FontWeight.w700,
+                                                letterSpacing: 0.8,
+                                                color: muted,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            AmodoroPressableButton(
+                                              onTap: () =>
+                                                  _openCardSubmenu(card),
+                                              width: 36,
+                                              height: 36,
+                                              radius: 999,
+                                              color: Colors.white.withValues(
+                                                alpha: 0.78,
+                                              ),
+                                              borderColor: AmodoroTheme
+                                                  .darkenForPerspective(
+                                                cardColor,
+                                                0.14,
+                                              ),
+                                              borderWidth: 1.5,
+                                              lipColor: AmodoroTheme
+                                                  .darkenForPerspective(
+                                                cardColor,
+                                                0.22,
+                                              ),
+                                              lipHeight: 2.2,
+                                              child: AmodoroTheme.sysIcon(
+                                                Symbols.more_horiz,
+                                                size: 19,
                                                 color: AmodoroTheme.lightInk,
                                               ),
                                             ),
                                           ],
                                         ),
-                                      );
-                                    }).toList(),
+                                      ],
+                                    ),
+                                    if (card.mediaType == 'link' &&
+                                        card.linkUrl != null &&
+                                        card.linkUrl!.isNotEmpty) ...[
+                                      const SizedBox(height: 14),
+                                      LinkPreviewCard(
+                                        url: card.linkUrl!,
+                                        title: card.linkTitle,
+                                        thumbnail: card.linkThumbnail,
+                                        platform: card.linkPlatform,
+                                        cardBgColor: cardColor,
+                                      ),
+                                    ] else if (card.mediaType != 'none' &&
+                                        card.mediaUrl != null &&
+                                        card.mediaUrl!.isNotEmpty) ...[
+                                      const SizedBox(height: 14),
+                                      Builder(
+                                        builder: (context) {
+                                          final resolvedUrl = widget.api
+                                              .resolveMediaUrl(card.mediaUrl);
+                                          final heroTag =
+                                              'sent_media_${card.id}';
+                                          return GestureDetector(
+                                            onTap: () =>
+                                                FullscreenMediaViewer.open(
+                                              context,
+                                              imageUrl: resolvedUrl,
+                                              heroTag: heroTag,
+                                            ),
+                                            child: AspectRatio(
+                                              aspectRatio: 1.0,
+                                              child: Container(
+                                                decoration: BoxDecoration(
+                                                  borderRadius:
+                                                      BorderRadius.circular(28),
+                                                  border: Border.all(
+                                                    color:
+                                                        Colors.white.withValues(
+                                                      alpha: 0.65,
+                                                    ),
+                                                    width: 2.0,
+                                                  ),
+                                                ),
+                                                child: ClipRRect(
+                                                  borderRadius:
+                                                      BorderRadius.circular(26),
+                                                  child: Hero(
+                                                    tag: heroTag,
+                                                    child: _buildCardMedia(
+                                                      resolvedUrl,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                      if (card.altText != null &&
+                                          card.altText!.trim().isNotEmpty) ...[
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          card.altText!.trim(),
+                                          style: AmodoroTheme.googleSans(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: muted,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                    if (card.textContent.isNotEmpty) ...[
+                                      const SizedBox(height: 14),
+                                      Text(
+                                        card.textContent,
+                                        style: AmodoroTheme.getCardTextStyle(
+                                          fontFamily: card.fontFamily,
+                                          color: ink,
+                                          fontSizePx: card.fontSizePx,
+                                          fontSizeKey: card.fontSize,
+                                        ),
+                                      ),
+                                    ],
+                                    if (emojiReactions.isNotEmpty) ...[
+                                      const SizedBox(height: 14),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: emojiReactions.map((r) {
+                                          return Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 6,
+                                            ),
+                                            decoration:
+                                                AmodoroTheme.cardOutlineBox(
+                                              color: Colors.white.withValues(
+                                                alpha: 0.80,
+                                              ),
+                                              radius: 999,
+                                              borderColor: AmodoroTheme
+                                                  .darkenForPerspective(
+                                                cardColor,
+                                                0.14,
+                                              ),
+                                              borderWidth: 1.5,
+                                              subtleShadow: false,
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                FlatAvatarBadge(
+                                                  avatarId: r.authorAvatarId,
+                                                  size: 20,
+                                                  showPerspectiveBorder: false,
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  r.emoji!,
+                                                  style: const TextStyle(
+                                                    fontSize: 22,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+
+                              // Card replies displayed OUTSIDE the card, directly on the background
+                              if (card.replies.isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                ...card.replies.map(
+                                  (reply) => _buildOutsideReplyItem(
+                                    context,
+                                    reply: reply,
+                                    screenInk: screenInk,
+                                    isDark: isDark,
                                   ),
-                                ],
+                                ),
                               ],
-                            ),
+                            ],
                           );
                         },
                       ),
@@ -823,6 +852,100 @@ class _SentHistoryScreenState extends State<SentHistoryScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildOutsideReplyItem(
+    BuildContext context, {
+    required CardReplyItem reply,
+    required Color screenInk,
+    required bool isDark,
+  }) {
+    final String speaker = reply.isMine
+        ? 'Yo'
+        : (reply.authorLabel.isNotEmpty
+            ? reply.authorLabel
+            : widget.partnerNickname);
+    final String text = reply.textContent.trim();
+    final bool hasMedia =
+        reply.mediaUrl != null && reply.mediaUrl!.trim().isNotEmpty;
+    final Color borderColor =
+        isDark ? const Color(0xFF383232) : const Color(0xFFE5DEC9);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10, left: 8, right: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (text.isNotEmpty || hasMedia)
+            RichText(
+              textAlign: TextAlign.center,
+              text: TextSpan(
+                style: AmodoroTheme.googleSans(
+                  fontSize: 14.5,
+                  color: screenInk,
+                  height: 1.35,
+                ),
+                children: [
+                  TextSpan(
+                    text: text.isNotEmpty ? '$speaker: ' : '$speaker:',
+                    style: AmodoroTheme.googleSans(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w800,
+                      color: screenInk,
+                    ),
+                  ),
+                  if (text.isNotEmpty)
+                    TextSpan(
+                      text: '"$text"',
+                      style: AmodoroTheme.googleSans(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        color: screenInk,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          if (hasMedia) ...[
+            const SizedBox(height: 8),
+            Center(
+              child: Builder(
+                builder: (context) {
+                  final resolvedUrl =
+                      widget.api.resolveMediaUrl(reply.mediaUrl);
+                  final heroTag = 'sent_reply_${reply.id}';
+                  return GestureDetector(
+                    onTap: () => FullscreenMediaViewer.open(
+                      context,
+                      imageUrl: resolvedUrl,
+                      heroTag: heroTag,
+                    ),
+                    child: Container(
+                      width: 152,
+                      height: 152,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: borderColor,
+                          width: 2.0,
+                        ),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(22),
+                        child: Hero(
+                          tag: heroTag,
+                          child: _buildCardMedia(resolvedUrl),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

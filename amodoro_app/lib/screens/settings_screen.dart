@@ -41,19 +41,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     {'id': 'gray_kitten', 'label': 'Gatito gris'},
   ];
 
+  static const List<String> _defaultEmojis = [
+    '❤️', '🥰', '🥺', '✨', '🔥', '🫶',
+  ];
+
+  static const List<String> _suggestedEmojis = [
+    '❤️', '🥰', '🥺', '✨', '🔥', '🫶', '😍', '😂', '🤍', '🌸', '🌻', '🎉',
+  ];
+
   late String _avatarId;
   late final TextEditingController _myDisplayNameCtrl;
   late final TextEditingController _partnerNicknameCtrl;
   late final TextEditingController _pairCodeCtrl;
-  late final TextEditingController _newReplyCtrl;
-  late final TextEditingController _newEmojiCtrl;
   late String _themeMode;
-  late List<String> _quickReplies;
   late List<String> _reactionEmojis;
 
   bool _saving = false;
-  bool _addingReply = false;
-  bool _addingEmoji = false;
   bool _pairingBusy = false;
   bool _exportingBusy = false;
 
@@ -71,16 +74,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _partnerNicknameCtrl =
         TextEditingController(text: widget.sync.me.partnerNicknameGiven);
     _pairCodeCtrl = TextEditingController();
-    _newReplyCtrl = TextEditingController();
-    _newEmojiCtrl = TextEditingController();
     _themeMode = widget.sync.me.themeMode == 'auto'
         ? 'system'
         : widget.sync.me.themeMode;
     if (!['light', 'dark', 'system'].contains(_themeMode)) {
       _themeMode = 'system';
     }
-    _quickReplies = List<String>.from(widget.sync.me.quickReplies);
     _reactionEmojis = List<String>.from(widget.sync.me.reactionEmojis);
+    if (_reactionEmojis.isEmpty) {
+      _reactionEmojis = List<String>.from(_defaultEmojis);
+    }
   }
 
   @override
@@ -89,8 +92,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _myDisplayNameCtrl.dispose();
     _partnerNicknameCtrl.dispose();
     _pairCodeCtrl.dispose();
-    _newReplyCtrl.dispose();
-    _newEmojiCtrl.dispose();
     super.dispose();
   }
 
@@ -125,7 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         partnerNickname: _partnerNicknameCtrl.text.trim(),
         themeMode: _themeMode,
         accentPalette: widget.sync.me.accentPalette,
-        quickReplies: _quickReplies,
+        quickReplies: widget.sync.me.quickReplies,
         reactionEmojis: _reactionEmojis,
       );
       widget.onThemeChanged?.call(_themeMode);
@@ -146,37 +147,228 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _addReplyPhrase() {
-    final txt = _newReplyCtrl.text.trim();
-    if (txt.isEmpty) return;
+  void _toggleReactionEmoji(String emo) {
     setState(() {
-      _quickReplies.add(txt);
-      _newReplyCtrl.clear();
-      _addingReply = false;
+      if (_reactionEmojis.contains(emo)) {
+        if (_reactionEmojis.length > 1) {
+          _reactionEmojis.remove(emo);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Debes mantener al menos 1 emoji')),
+          );
+        }
+      } else {
+        _reactionEmojis.add(emo);
+      }
     });
   }
 
-  void _removeReplyAt(int index) {
-    setState(() {
-      _quickReplies.removeAt(index);
-    });
-  }
-
-  void _addReactionEmoji() {
-    final emo = _newEmojiCtrl.text.trim();
-    if (emo.isEmpty) return;
-    setState(() {
-      _reactionEmojis.add(emo);
-      _newEmojiCtrl.clear();
-      _addingEmoji = false;
-    });
+  void _addReactionEmoji(String emo) {
+    final clean = emo.trim();
+    if (clean.isEmpty) return;
+    if (!_reactionEmojis.contains(clean)) {
+      setState(() {
+        _reactionEmojis.add(clean);
+      });
+    }
   }
 
   void _removeEmojiAt(int index) {
-    if (_reactionEmojis.length <= 1) return;
+    if (_reactionEmojis.length <= 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Debes mantener al menos 1 emoji')),
+      );
+      return;
+    }
     setState(() {
       _reactionEmojis.removeAt(index);
     });
+  }
+
+  void _restoreDefaultEmojis() {
+    setState(() {
+      _reactionEmojis = List<String>.from(_defaultEmojis);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Emojis predeterminados restaurados')),
+    );
+  }
+
+  Future<void> _showAddEmojiModal(BuildContext context) async {
+    final customCtrl = TextEditingController();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        final isDark = Theme.of(sheetCtx).brightness == Brightness.dark;
+        final cardBg = isDark ? AmodoroTheme.darkContainer : Colors.white;
+        final fieldBg =
+            isDark ? const Color(0xFF1B1818) : AmodoroTheme.lightContainer;
+        final borderColor =
+            isDark ? const Color(0xFF383232) : const Color(0xFFE9E4DC);
+        final inkColor = isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk;
+        final coralBg =
+            isDark ? AmodoroTheme.coralPillDark : AmodoroTheme.coralPillLight;
+        final coralLip = isDark
+            ? AmodoroTheme.coralPillBorderDark
+            : AmodoroTheme.coralPillBorderLight;
+
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+              ),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
+                decoration: AmodoroTheme.cardOutlineBox(
+                  color: cardBg,
+                  radius: 34,
+                  borderColor: borderColor,
+                  borderWidth: 2.5,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'AÑADIR EMOJI AL DOCK',
+                          style: AmodoroTheme.googleSans(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.0,
+                            color: inkColor,
+                          ),
+                        ),
+                        AmodoroPressableButton(
+                          onTap: () => Navigator.of(sheetCtx).pop(),
+                          color: fieldBg,
+                          borderColor: borderColor,
+                          borderWidth: 1.5,
+                          lipHeight: 2.5,
+                          radius: 999,
+                          width: 48,
+                          height: 48,
+                          child: AmodoroTheme.sysIcon(
+                            Symbols.close,
+                            size: 20,
+                            color: inkColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 18),
+                            decoration: AmodoroTheme.cardOutlineBox(
+                              color: fieldBg,
+                              radius: 999,
+                              borderColor: borderColor,
+                              borderWidth: 2.5,
+                              subtleShadow: false,
+                            ),
+                            child: TextField(
+                              controller: customCtrl,
+                              autofocus: true,
+                              style: const TextStyle(fontSize: 20),
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                hintText: 'Escribe cualquier emoji...',
+                                isDense: true,
+                                contentPadding:
+                                    EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              onSubmitted: (txt) {
+                                if (txt.trim().isNotEmpty) {
+                                  _addReactionEmoji(txt.trim());
+                                  Navigator.of(sheetCtx).pop();
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        AmodoroPressableButton(
+                          onTap: () {
+                            if (customCtrl.text.trim().isNotEmpty) {
+                              _addReactionEmoji(customCtrl.text.trim());
+                              Navigator.of(sheetCtx).pop();
+                            }
+                          },
+                          color: coralBg,
+                          lipColor: coralLip,
+                          lipHeight: 3.0,
+                          radius: 999,
+                          width: 48,
+                          height: 48,
+                          child: AmodoroTheme.sysIcon(
+                            Symbols.check,
+                            size: 20,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'O SELECCIONA UNO:',
+                      style: AmodoroTheme.googleSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.0,
+                        color: isDark
+                            ? AmodoroTheme.darkMuted
+                            : AmodoroTheme.lightMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _suggestedEmojis.map((emo) {
+                        final isSelected = _reactionEmojis.contains(emo);
+                        return AmodoroPressableButton(
+                          onTap: () {
+                            _toggleReactionEmoji(emo);
+                            setModalState(() {});
+                          },
+                          color: isSelected
+                              ? coralBg.withValues(alpha: 0.15)
+                              : fieldBg,
+                          borderColor: isSelected ? coralBg : borderColor,
+                          borderWidth: isSelected ? 2.0 : 1.5,
+                          lipColor: isSelected ? coralLip : borderColor,
+                          lipHeight: 2.0,
+                          radius: 999,
+                          width: 48,
+                          height: 48,
+                          child: Center(
+                            child: Text(
+                              emo,
+                              style: const TextStyle(fontSize: 24),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _generateInvite() async {
@@ -295,7 +487,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
                 decoration: AmodoroTheme.cardOutlineBox(
                   color: cardBg,
-                  radius: 32,
+                  radius: 34,
                   borderColor: borderColor,
                   borderWidth: 2.5,
                 ),
@@ -429,7 +621,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.all(20),
           decoration: AmodoroTheme.cardOutlineBox(
             color: cardBg,
-            radius: 28,
+            radius: 34,
             borderColor: borderColor,
             borderWidth: 2.5,
           ),
@@ -567,10 +759,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               // Apodo que tú le pones a tu pareja (cardOutlineBox borderWidth: 2.5)
               Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
                 decoration: AmodoroTheme.cardOutlineBox(
                   color: fieldBg,
-                  radius: 20,
+                  radius: 999,
                   borderColor: borderColor,
                   borderWidth: 2.5,
                   subtleShadow: false,
@@ -654,13 +846,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 18),
 
         // ---------------------------------------------------------------------
-        // SECCIÓN 2: Emojis y Respuestas Predeterminadas
+        // ---------------------------------------------------------------------
+        // SECCIÓN 2: Dock de Emojis de Reacción (Estilo Instagram)
         // ---------------------------------------------------------------------
         Container(
           padding: const EdgeInsets.all(20),
           decoration: AmodoroTheme.cardOutlineBox(
             color: cardBg,
-            radius: 28,
+            radius: 34,
             borderColor: borderColor,
             borderWidth: 2.5,
           ),
@@ -672,9 +865,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      'EMOJIS DE REACCIÓN EN HOME',
+                      'DOCK DE EMOJIS DE REACCIÓN',
                       style: AmodoroTheme.googleSans(
-                        fontSize: 11.5,
+                        fontSize: 12,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1.1,
                         color: inkColor,
@@ -682,7 +875,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   AmodoroPressableButton(
-                    onTap: () => setState(() => _addingEmoji = !_addingEmoji),
+                    onTap: () => _showAddEmojiModal(context),
                     color: fieldBg,
                     borderColor: borderColor,
                     borderWidth: 1.5,
@@ -705,226 +898,193 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              if (_addingEmoji) ...[
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          decoration: AmodoroTheme.cardOutlineBox(
-                            color: fieldBg,
-                            radius: 18,
-                            borderColor: borderColor,
-                            borderWidth: 2.5,
-                            subtleShadow: false,
-                          ),
-                          child: TextField(
-                            controller: _newEmojiCtrl,
-                            autofocus: true,
-                            onSubmitted: (_) => _addReactionEmoji(),
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              hintText: 'Escribe un emoji...',
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      AmodoroPressableButton(
-                        onTap: _addReactionEmoji,
-                        color: coralBg,
-                        lipColor: coralLip,
-                        lipHeight: 3.0,
-                        radius: 999,
-                        width: 48,
-                        height: 48,
-                        child: AmodoroTheme.sysIcon(
-                          Symbols.check,
-                          size: 20,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
+              const SizedBox(height: 6),
+              Text(
+                'Personaliza los emojis que aparecen al reaccionar (toca para quitar o pulsa + para añadir):',
+                style: AmodoroTheme.googleSans(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: mutedColor,
                 ),
-              ],
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: List.generate(_reactionEmojis.length, (i) {
-                  final emo = _reactionEmojis[i];
-                  return AmodoroPressableButton(
-                    onTap: _reactionEmojis.length > 1
-                        ? () => _removeEmojiAt(i)
-                        : null,
+              ),
+              const SizedBox(height: 14),
+
+              // Instagram-style rounded dock container
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: AmodoroTheme.cardOutlineBox(
                     color: fieldBg,
-                    borderColor: borderColor,
-                    borderWidth: 1.5,
-                    lipColor: borderColor,
-                    lipHeight: 2.5,
                     radius: 999,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
+                    borderColor: borderColor,
+                    borderWidth: 2.0,
+                    subtleShadow: false,
+                  ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(emo, style: const TextStyle(fontSize: 15)),
-                        if (_reactionEmojis.length > 1) ...[
-                          const SizedBox(width: 6),
-                          AmodoroTheme.sysIcon(
-                            Symbols.close,
-                            size: 15,
-                            color: mutedColor,
-                          ),
-                        ],
-                      ],
-                    ),
-                  );
-                }),
-              ),
-              const SizedBox(height: 22),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'RESPUESTAS PREDETERMINADAS',
-                      style: AmodoroTheme.googleSans(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1,
-                        color: inkColor,
-                      ),
-                    ),
-                  ),
-                  AmodoroPressableButton(
-                    onTap: () => setState(() => _addingReply = !_addingReply),
-                    color: fieldBg,
-                    borderColor: borderColor,
-                    borderWidth: 1.5,
-                    lipColor: borderColor,
-                    lipHeight: 2.5,
-                    radius: 999,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    child: Text(
-                      '+ AÑADIR',
-                      style: AmodoroTheme.googleSans(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.0,
-                        color: inkColor,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              if (_addingReply) ...[
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          decoration: AmodoroTheme.cardOutlineBox(
-                            color: fieldBg,
-                            radius: 18,
-                            borderColor: borderColor,
-                            borderWidth: 2.5,
-                            subtleShadow: false,
-                          ),
-                          child: TextField(
-                            controller: _newReplyCtrl,
-                            autofocus: true,
-                            onSubmitted: (_) => _addReplyPhrase(),
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              hintText: 'Nueva frase...',
+                        ..._reactionEmojis.asMap().entries.map((entry) {
+                          final idx = entry.key;
+                          final emo = entry.value;
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                AmodoroPressableButton(
+                                  onTap: () => _removeEmojiAt(idx),
+                                  color: cardBg,
+                                  borderColor: borderColor,
+                                  borderWidth: 1.5,
+                                  lipColor: borderColor,
+                                  lipHeight: 2.0,
+                                  radius: 999,
+                                  width: 48,
+                                  height: 48,
+                                  child: Center(
+                                    child: Text(
+                                      emo,
+                                      style: const TextStyle(fontSize: 24),
+                                    ),
+                                  ),
+                                ),
+                                if (_reactionEmojis.length > 1)
+                                  Positioned(
+                                    top: -2,
+                                    right: -2,
+                                    child: GestureDetector(
+                                      onTap: () => _removeEmojiAt(idx),
+                                      child: Container(
+                                        width: 18,
+                                        height: 18,
+                                        decoration: BoxDecoration(
+                                          color: coralBg,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Center(
+                                          child: Icon(
+                                            Icons.close,
+                                            size: 11,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        }),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: AmodoroPressableButton(
+                            onTap: () => _showAddEmojiModal(context),
+                            color: coralBg,
+                            lipColor: coralLip,
+                            lipHeight: 2.5,
+                            radius: 999,
+                            width: 48,
+                            height: 48,
+                            child: const Center(
+                              child: Icon(
+                                Icons.add,
+                                size: 24,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // Popular suggested emojis quick grid
+              Text(
+                'EMOJIS SUGERIDOS (TOCA PARA AÑADIR O QUITAR)',
+                style: AmodoroTheme.googleSans(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.0,
+                  color: mutedColor,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: _suggestedEmojis.map((emo) {
+                  final isSelected = _reactionEmojis.contains(emo);
+                  return AmodoroPressableButton(
+                    onTap: () => _toggleReactionEmoji(emo),
+                    color: isSelected
+                        ? coralBg.withValues(alpha: 0.15)
+                        : fieldBg,
+                    borderColor: isSelected ? coralBg : borderColor,
+                    borderWidth: isSelected ? 2.0 : 1.5,
+                    lipColor: isSelected ? coralLip : borderColor,
+                    lipHeight: 2.0,
+                    radius: 999,
+                    width: 48,
+                    height: 48,
+                    child: Center(
+                      child: Text(
+                        emo,
+                        style: const TextStyle(fontSize: 24),
                       ),
-                      const SizedBox(width: 10),
-                      AmodoroPressableButton(
-                        onTap: _addReplyPhrase,
-                        color: coralBg,
-                        lipColor: coralLip,
-                        lipHeight: 3.0,
-                        radius: 999,
-                        width: 48,
-                        height: 48,
-                        child: AmodoroTheme.sysIcon(
-                          Symbols.check,
-                          size: 20,
-                          color: Colors.white,
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+
+              Center(
+                child: AmodoroPressableButton(
+                  onTap: _restoreDefaultEmojis,
+                  color: fieldBg,
+                  borderColor: borderColor,
+                  borderWidth: 1.5,
+                  lipColor: borderColor,
+                  lipHeight: 2.5,
+                  radius: 999,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 10,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AmodoroTheme.sysIcon(
+                        Symbols.restart_alt,
+                        size: 16,
+                        color: mutedColor,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'RESTAURAR PREDETERMINADOS',
+                        style: AmodoroTheme.googleSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.0,
+                          color: inkColor,
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-              ...List.generate(_quickReplies.length, (i) {
-                final phrase = _quickReplies[i];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    decoration: AmodoroTheme.cardOutlineBox(
-                      color: fieldBg,
-                      radius: 18,
-                      borderColor: borderColor,
-                      borderWidth: 2.5,
-                      subtleShadow: false,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            phrase,
-                            style: AmodoroTheme.googleSans(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w700,
-                              color: inkColor,
-                            ),
-                          ),
-                        ),
-                        AmodoroPressableButton(
-                          onTap: () => _removeReplyAt(i),
-                          color: cardBg,
-                          borderColor: borderColor,
-                          borderWidth: 1.5,
-                          lipColor: borderColor,
-                          lipHeight: 2.0,
-                          radius: 999,
-                          width: 38,
-                          height: 38,
-                          child: AmodoroTheme.sysIcon(
-                            Symbols.delete,
-                            size: 18,
-                            color: mutedColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
-              const SizedBox(height: 8),
+              ),
+              const SizedBox(height: 18),
 
-              // Botón GUARDAR CAMBIOS
+              // Botón GUARDAR CAMBIOS (radius: 999)
               AmodoroPressableButton(
                 onTap: _saving ? null : _saveSettings,
                 color: coralBg,
@@ -954,7 +1114,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.all(20),
           decoration: AmodoroTheme.cardOutlineBox(
             color: cardBg,
-            radius: 28,
+            radius: 34,
             borderColor: borderColor,
             borderWidth: 2.5,
           ),
@@ -976,10 +1136,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     Expanded(
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
                         decoration: AmodoroTheme.cardOutlineBox(
                           color: fieldBg,
-                          radius: 18,
+                          radius: 999,
                           borderColor: borderColor,
                           borderWidth: 2.5,
                           subtleShadow: false,
@@ -1074,7 +1234,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.all(20),
           decoration: AmodoroTheme.cardOutlineBox(
             color: cardBg,
-            radius: 28,
+            radius: 34,
             borderColor: borderColor,
             borderWidth: 2.5,
           ),
@@ -1187,7 +1347,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.all(20),
           decoration: AmodoroTheme.cardOutlineBox(
             color: cardBg,
-            radius: 28,
+            radius: 34,
             borderColor: borderColor,
             borderWidth: 2.5,
           ),
@@ -1370,7 +1530,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
       decoration: AmodoroTheme.cardOutlineBox(
         color: bgColor,
-        radius: 20,
+        radius: 28,
         borderColor: borderColor,
         borderWidth: 2.5,
         subtleShadow: false,

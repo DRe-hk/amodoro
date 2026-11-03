@@ -175,6 +175,26 @@ export const homeCardReactions = sqliteTable(
   (t) => [index("home_card_reactions_card_idx").on(t.cardId)],
 );
 
+export const homeCardReplies = sqliteTable(
+  "home_card_replies",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    cardId: integer("card_id")
+      .notNull()
+      .references(() => homeCards.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    textContent: text("text_content").notNull().default(""),
+    mediaType: text("media_type").notNull().default("none"),
+    mediaId: integer("media_id").references(() => media.id, {
+      onDelete: "set null",
+    }),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("idx_home_card_replies_card_id").on(t.cardId)],
+);
+
 export const boards = sqliteTable(
   "boards",
   {

@@ -17,8 +17,16 @@ import {
   recoverUserPin,
   redeemInviteByTokenOrCode,
   registerNewUser,
+  updateUserSettings,
   verifyUserPin,
 } from "../src/lib/auth";
+import {
+  createHomeCard,
+  getReceivedHomeCards,
+  getSentHomeCards,
+  reactToHomeCard,
+  replyToHomeCard,
+} from "../src/lib/home-cards";
 import {
   addBoardItem,
   completeBoardItem,
@@ -297,4 +305,124 @@ test("Motor de Decisión: Ruleta y Votación ciega de 4-5 actividades con acuerd
   state = getCurrentDecisionState(userA.id);
   assert.equal(state?.status, "resolved");
   assert.equal(state?.winner?.id, c1.id);
+});
+
+test("Respuestas múltiples inmutables V1.6 (texto, foto y dibujo) y reacciones emoji individuales", () => {
+  ensureInitialSeed();
+  const [userA, userB] = getAllUsers();
+  assert.ok(userA && userB);
+
+  // UserA gives nickname "Mi Cielo" to UserB; UserB gives nickname "Amor" to UserA
+  updateUserSettings({ userId: userA.id, partnerNickname: "Mi Cielo" });
+  updateUserSettings({ userId: userB.id, partnerNickname: "Amor" });
+
+  const card = createHomeCard({
+    authorId: userA.id,
+    body: "Buenos días, te dejé café listo ☕",
+    bgColor: "#FFDAD6",
+    fontFamily: "sans",
+    fontSize: "md",
+  });
+
+  const validPngDataUrl =
+    "data:image/png;base64," +
+    Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+    ]).toString("base64");
+
+  // 1. UserB replies with text
+  const r1 = replyToHomeCard(userB, {
+    cardId: card.id,
+    textContent: "¡Gracias mi amor, estaba riquísimo!",
+  });
+  assert.equal(r1.authorLabel, "Yo");
+  assert.equal(r1.isMine, true);
+  assert.equal(r1.mediaType, "none");
+
+  // 2. UserA replies back with a photo + text
+  const r2 = replyToHomeCard(userA, {
+    cardId: card.id,
+    textContent: "Mira cómo quedó la espuma",
+    mediaType: "image",
+    mediaDataUrl: validPngDataUrl,
+  });
+  assert.equal(r2.mediaType, "image");
+  assert.ok(r2.mediaUrl?.startsWith("/api/media/"));
+
+  // 3. UserB replies again with a drawing
+  const r3 = replyToHomeCard(userB, {
+    cardId: card.id,
+    textContent: "Un corazoncito para ti",
+    mediaType: "drawing",
+    mediaDataUrl: validPngDataUrl,
+  });
+  assert.equal(r3.mediaType, "drawing");
+  assert.ok(r3.mediaUrl?.startsWith("/api/media/"));
+
+  // Check chronological replies from UserA's perspective (sent cards)
+  const sentForA = getSentHomeCards(userA.id).find((c) => c.id === card.id);
+  assert.ok(sentForA);
+  assert.equal(sentForA.replies.length, 3);
+  assert.deepEqual(
+    sentForA.replies.map((r) => r.textContent),
+    [
+      "¡Gracias mi amor, estaba riquísimo!",
+      "Mira cómo quedó la espuma",
+      "Un corazoncito para ti",
+    ],
+  );
+  assert.deepEqual(
+    sentForA.replies.map((r) => r.authorLabel),
+    ["Mi Cielo", "Yo", "Mi Cielo"],
+  );
+  assert.deepEqual(
+    sentForA.replies.map((r) => r.isMine),
+    [false, true, false],
+  );
+
+  // Check chronological replies from UserB's perspective (received cards)
+  const receivedForB = getReceivedHomeCards(userB.id).latest;
+  assert.ok(receivedForB);
+  assert.equal(receivedForB.id, card.id);
+  assert.equal(receivedForB.replies.length, 3);
+  assert.deepEqual(
+    receivedForB.replies.map((r) => r.authorLabel),
+    ["Yo", "Amor", "Yo"],
+  );
+  assert.deepEqual(
+    receivedForB.replies.map((r) => r.isMine),
+    [true, false, true],
+  );
+
+  // Emoji reaction dock toggling: replaces or removes only the user's single emoji reaction
+  reactToHomeCard({ cardId: card.id, userId: userB.id, emoji: "❤️" });
+  reactToHomeCard({ cardId: card.id, userId: userA.id, emoji: "🥰" });
+
+  let cardCheck = getReceivedHomeCards(userB.id).latest!;
+  assert.equal(cardCheck.reactions.length, 2);
+
+  // UserB switches emoji from ❤️ to 🔥 -> replaces UserB's emoji without touching UserA's emoji or replies
+  reactToHomeCard({ cardId: card.id, userId: userB.id, emoji: "🔥" });
+  cardCheck = getReceivedHomeCards(userB.id).latest!;
+  assert.equal(cardCheck.reactions.length, 2);
+  assert.equal(
+    cardCheck.reactions.find((r) => r.userId === userB.id)?.emoji,
+    "🔥",
+  );
+  assert.equal(
+    cardCheck.reactions.find((r) => r.userId === userA.id)?.emoji,
+    "🥰",
+  );
+
+  // UserB taps 🔥 again -> removes only UserB's emoji reaction
+  const toggleRes = reactToHomeCard({
+    cardId: card.id,
+    userId: userB.id,
+    emoji: "🔥",
+  });
+  assert.equal(toggleRes.removed, true);
+  cardCheck = getReceivedHomeCards(userB.id).latest!;
+  assert.equal(cardCheck.reactions.length, 1);
+  assert.equal(cardCheck.reactions[0]?.userId, userA.id);
+  assert.equal(cardCheck.replies.length, 3);
 });

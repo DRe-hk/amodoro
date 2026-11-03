@@ -83,8 +83,8 @@ class FlatAvatarBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final option = flatAvatarFor(avatarId);
-    final bgColor = option.background;
+    final preset = flatAvatarFor(avatarId);
+    final bgColor = preset.background;
 
     final effectiveBorderColor =
         borderColor ?? AmodoroTheme.darkenForPerspective(bgColor, 0.16);
@@ -93,7 +93,7 @@ class FlatAvatarBadge extends StatelessWidget {
 
     final decoration = BoxDecoration(
       color: bgColor,
-      shape: BoxShape.circle,
+      borderRadius: BorderRadius.circular(999),
       border: Border.all(
         color: effectiveBorderColor,
         width: effectiveBorderWidth,
@@ -105,14 +105,15 @@ class FlatAvatarBadge extends StatelessWidget {
       width: size,
       height: size,
       decoration: decoration,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(size),
-        child: CustomPaint(
-          size: Size(size, size),
-          painter: _FlatAnimalPainter(
-            avatarId: option.id,
-            primaryColor: option.primary,
-            backgroundColor: bgColor,
+      child: ClipOval(
+        child: Image.asset(
+          'assets/avatars/${preset.id}.png',
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => CustomPaint(
+            size: Size(size, size),
+            painter: _FlatAnimalAvatarPainter(avatarId: preset.id),
           ),
         ),
       ),
@@ -130,6 +131,37 @@ class FlatAvatar extends FlatAvatarBadge {
     super.borderColor,
     super.borderWidth,
   });
+}
+
+/// Fallback vector animal painter delegate wrapper.
+class _FlatAnimalAvatarPainter extends CustomPainter {
+  final String avatarId;
+  final Color? primaryColor;
+  final Color? backgroundColor;
+
+  const _FlatAnimalAvatarPainter({
+    required this.avatarId,
+    this.primaryColor,
+    this.backgroundColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final option = flatAvatarFor(avatarId);
+    final painter = _FlatAnimalPainter(
+      avatarId: avatarId,
+      primaryColor: primaryColor ?? option.primary,
+      backgroundColor: backgroundColor ?? option.background,
+    );
+    painter.paint(canvas, size);
+  }
+
+  @override
+  bool shouldRepaint(covariant _FlatAnimalAvatarPainter oldDelegate) {
+    return oldDelegate.avatarId != avatarId ||
+        oldDelegate.primaryColor != primaryColor ||
+        oldDelegate.backgroundColor != backgroundColor;
+  }
 }
 
 /// Horizontal selector row for picking one of the 5 flat avatars.

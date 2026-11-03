@@ -187,6 +187,47 @@ class ReactionItem {
   }
 }
 
+class CardReplyItem {
+  final String id;
+  final String cardId;
+  final int userId;
+  final String authorLabel;
+  final String authorAvatarId;
+  final bool isMine;
+  final String textContent;
+  final String mediaType;
+  final String? mediaUrl;
+  final String createdAt;
+
+  const CardReplyItem({
+    required this.id,
+    required this.cardId,
+    required this.userId,
+    required this.authorLabel,
+    required this.authorAvatarId,
+    required this.isMine,
+    required this.textContent,
+    this.mediaType = 'none',
+    this.mediaUrl,
+    required this.createdAt,
+  });
+
+  factory CardReplyItem.fromJson(Map<String, dynamic> json) {
+    return CardReplyItem(
+      id: (json['id'] ?? '').toString(),
+      cardId: (json['cardId'] ?? '').toString(),
+      userId: (json['userId'] as num?)?.toInt() ?? 0,
+      authorLabel: (json['authorLabel'] ?? 'Yo').toString(),
+      authorAvatarId: (json['authorAvatarId'] ?? 'cat').toString(),
+      isMine: json['isMine'] == true,
+      textContent: (json['textContent'] ?? '').toString(),
+      mediaType: (json['mediaType'] ?? 'none').toString(),
+      mediaUrl: json['mediaUrl']?.toString(),
+      createdAt: (json['createdAt'] ?? '').toString(),
+    );
+  }
+}
+
 class HomeCardItem {
   final String id;
   final int senderId;
@@ -209,6 +250,7 @@ class HomeCardItem {
   final int fontSizePx;
   final String createdAt;
   final List<ReactionItem> reactions;
+  final List<CardReplyItem> replies;
 
   const HomeCardItem({
     required this.id,
@@ -232,10 +274,52 @@ class HomeCardItem {
     required this.fontSizePx,
     required this.createdAt,
     required this.reactions,
+    this.replies = const [],
   });
 
   factory HomeCardItem.fromJson(Map<String, dynamic> json) {
     final rawReactions = json['reactions'];
+    final rawReplies = json['replies'];
+
+    final parsedReactions = rawReactions is List
+        ? rawReactions
+            .whereType<Map<String, dynamic>>()
+            .where((r) => (r['emoji'] ?? '').toString().trim().isNotEmpty)
+            .map(ReactionItem.fromJson)
+            .toList()
+        : const <ReactionItem>[];
+
+    List<CardReplyItem> repliesList = [];
+    if (rawReplies is List && rawReplies.isNotEmpty) {
+      repliesList = rawReplies
+          .whereType<Map<String, dynamic>>()
+          .map(CardReplyItem.fromJson)
+          .toList();
+    } else if (rawReactions is List) {
+      for (final r in rawReactions) {
+        if (r is Map<String, dynamic>) {
+          final pText = (r['presetText'] ?? '').toString().trim();
+          if (pText.isNotEmpty) {
+            repliesList.add(
+              CardReplyItem(
+                id: (r['id'] ?? '').toString(),
+                cardId: (json['id'] ?? '').toString(),
+                userId: (r['userId'] as num?)?.toInt() ?? 0,
+                authorLabel: (r['authorLabel'] ?? 'Yo').toString(),
+                authorAvatarId: (r['authorAvatarId'] ?? 'cat').toString(),
+                isMine: r['isMine'] == true ||
+                    (r['authorLabel']?.toString().toUpperCase() == 'YO'),
+                textContent: pText,
+                mediaType: 'none',
+                mediaUrl: null,
+                createdAt: (r['createdAt'] ?? '').toString(),
+              ),
+            );
+          }
+        }
+      }
+    }
+
     return HomeCardItem(
       id: (json['id'] ?? '').toString(),
       senderId: (json['senderId'] as num?)?.toInt() ?? 0,
@@ -257,12 +341,8 @@ class HomeCardItem {
       fontSize: (json['fontSize'] ?? 'md').toString(),
       fontSizePx: (json['fontSizePx'] as num?)?.toInt() ?? 18,
       createdAt: (json['createdAt'] ?? '').toString(),
-      reactions: rawReactions is List
-          ? rawReactions
-              .whereType<Map<String, dynamic>>()
-              .map(ReactionItem.fromJson)
-              .toList()
-          : const [],
+      reactions: parsedReactions,
+      replies: repliesList,
     );
   }
 }

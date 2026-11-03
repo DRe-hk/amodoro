@@ -80,7 +80,7 @@ class PinKeypadWidgetState extends State<PinKeypadWidget> {
         borderWidth: 1.5,
         lipColor: lipColor,
         lipHeight: 3.0,
-        radius: 20,
+        radius: 999,
         height: 54,
         child: Text(
           digit,
@@ -216,7 +216,7 @@ class PinKeypadWidgetState extends State<PinKeypadWidget> {
                         borderWidth: 1.5,
                         lipColor: lipColor,
                         lipHeight: 3.0,
-                        radius: 20,
+                        radius: 999,
                         height: 54,
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: Text(
@@ -245,7 +245,7 @@ class PinKeypadWidgetState extends State<PinKeypadWidget> {
                   borderWidth: 1.5,
                   lipColor: lipColor,
                   lipHeight: 3.0,
-                  radius: 20,
+                  radius: 999,
                   height: 54,
                   child: AmodoroTheme.sysIcon(
                     Symbols.backspace,

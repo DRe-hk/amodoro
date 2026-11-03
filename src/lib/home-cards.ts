@@ -1,13 +1,33 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   homeCardReactions,
+  homeCardReplies,
   homeCards,
+  media,
   users,
   type CardFont,
   type CardFontSize,
 } from "@/db/schema";
-import { getPartnerUser } from "./auth";
+import { getAllUsers, getPartnerUser } from "./auth";
+import {
+  MAX_IMAGE_BYTES,
+  UPLOADS_PATH,
+  checkMediaQuota,
+  detectImageMimeFromMagicBytes,
+} from "./media";
+
+export type AuthUser = {
+  id: number;
+  username?: string;
+  displayName?: string;
+  avatarId?: string;
+  partnerId?: number | null;
+  nicknameByPartner?: string;
+};
 
 export type ReactionItem = {
   id: number;
@@ -17,6 +37,19 @@ export type ReactionItem = {
   presetText: string | null;
   createdAt: Date;
 };
+
+export interface HomeCardReplyDto {
+  id: string;
+  cardId: string;
+  userId: number;
+  authorLabel: string;
+  authorAvatarId: string;
+  isMine: boolean;
+  textContent: string;
+  mediaType: "none" | "image" | "drawing";
+  mediaUrl: string | null;
+  createdAt: string;
+}
 
 export type HydratedHomeCard = {
   id: number;
@@ -39,30 +72,201 @@ export type HydratedHomeCard = {
   fontSizePx: number;
   createdAt: Date;
   reactions: ReactionItem[];
+  replies: HomeCardReplyDto[];
 };
 
-function attachReactions(
-  rows: Omit<HydratedHomeCard, "reactions">[],
+export type HomeCardDto = HydratedHomeCard;
+
+export function getCoupleUserIds(userId: number): number[] {
+  const partner = getPartnerUser(userId);
+  return partner ? [userId, partner.id] : [userId];
+}
+
+export function resolveAuthorLabel(
+  authorUserId: number,
+  viewer: { id: number } | number,
+  partnerOrAuthor?: {
+    nicknameByPartner?: string | null;
+    displayName?: string | null;
+    username?: string | null;
+  } | null,
+): string {
+  const viewerId = typeof viewer === "number" ? viewer : viewer.id;
+  if (authorUserId === viewerId) {
+    return "Yo";
+  }
+  const author =
+    partnerOrAuthor ??
+    db.select().from(users).where(eq(users.id, authorUserId)).get();
+  return (
+    author?.nicknameByPartner?.trim() ||
+    author?.displayName?.trim() ||
+    author?.username?.trim() ||
+    "Pareja"
+  );
+}
+
+export function saveBase64Media(input: {
+  dataUrl: string;
+  kind?: "image" | "drawing";
+  altText?: string | null;
+  ownerId: number;
+}): number {
+  const raw = input.dataUrl.trim();
+  const cleaned = raw.replace(/^data:[^;]+;base64,/, "").trim();
+  const bytes = Buffer.from(cleaned, "base64");
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_IMAGE_BYTES) {
+    throw new Error("Tamaño de imagen no válido.");
+  }
+
+  let detected = detectImageMimeFromMagicBytes(bytes);
+  if (!detected) {
+    const headerMatch = /^data:image\/(png|jpeg|jpg|webp|gif);base64,/i.exec(raw);
+    const headAscii = bytes.toString("utf8", 0, Math.min(bytes.byteLength, 32));
+    if (headerMatch && !headAscii.includes("<")) {
+      const sub = headerMatch[1]!.toLowerCase();
+      detected =
+        sub === "png"
+          ? { mime: "image/png", ext: "png" }
+          : sub === "webp"
+            ? { mime: "image/webp", ext: "webp" }
+            : sub === "gif"
+              ? { mime: "image/gif", ext: "gif" }
+              : { mime: "image/jpeg", ext: "jpg" };
+    } else {
+      throw new Error("Formato de imagen no permitido.");
+    }
+  }
+
+  checkMediaQuota(bytes.byteLength);
+
+  const id = randomUUID();
+  const relPath = `${id.slice(0, 2)}/${id}.${detected.ext}`;
+  const targetDir = join(
+    /*turbopackIgnore: true*/ UPLOADS_PATH,
+    id.slice(0, 2),
+  );
+  const fullPath = join(
+    /*turbopackIgnore: true*/ targetDir,
+    `${id}.${detected.ext}`,
+  );
+
+  mkdirSync(targetDir, { recursive: true });
+  writeFileSync(fullPath, bytes);
+
+  const row = db
+    .insert(media)
+    .values({
+      ownerId: input.ownerId,
+      kind: input.kind ?? "image",
+      path: relPath,
+      mime: detected.mime,
+      bytes: bytes.byteLength,
+      altText: input.altText?.trim() || null,
+      createdAt: new Date(),
+    })
+    .returning({ id: media.id })
+    .get();
+
+  return row.id;
+}
+
+function attachReactionsAndReplies(
+  rows: Omit<HydratedHomeCard, "reactions" | "replies">[],
+  viewerId: number,
 ): HydratedHomeCard[] {
   if (rows.length === 0) return [];
   const cardIds = rows.map((r) => r.id);
+  const allUsers = getAllUsers();
+  const userById = new Map(allUsers.map((u) => [u.id, u]));
+  const viewer = userById.get(viewerId) ?? { id: viewerId };
+  const partner = getPartnerUser(viewerId);
+
   const allReactions = db
     .select()
     .from(homeCardReactions)
     .where(inArray(homeCardReactions.cardId, cardIds))
-    .orderBy(desc(homeCardReactions.createdAt))
+    .orderBy(asc(homeCardReactions.id))
     .all();
 
-  const byCard = new Map<number, ReactionItem[]>();
+  const allReplies = db
+    .select()
+    .from(homeCardReplies)
+    .where(inArray(homeCardReplies.cardId, cardIds))
+    .orderBy(asc(homeCardReplies.id))
+    .all();
+
+  const reactionsByCard = new Map<number, ReactionItem[]>();
+  const repliesByCard = new Map<number, HomeCardReplyDto[]>();
+
   for (const rx of allReactions) {
-    const list = byCard.get(rx.cardId) ?? [];
-    list.push(rx);
-    byCard.set(rx.cardId, list);
+    const cleanPreset = rx.presetText?.trim() || "";
+    if (cleanPreset.length > 0) {
+      const rxAuthor = userById.get(rx.userId) ?? partner;
+      const replyList = repliesByCard.get(rx.cardId) ?? [];
+      replyList.push({
+        id: `legacy-${rx.id}`,
+        cardId: String(rx.cardId),
+        userId: rx.userId,
+        authorLabel:
+          rx.userId === viewerId
+            ? "Yo"
+            : resolveAuthorLabel(rx.userId, viewer, rxAuthor),
+        authorAvatarId: rxAuthor?.avatarId || "cat",
+        isMine: rx.userId === viewerId,
+        textContent: cleanPreset,
+        mediaType: "none",
+        mediaUrl: null,
+        createdAt: rx.createdAt.toISOString(),
+      });
+      repliesByCard.set(rx.cardId, replyList);
+    }
+
+    const cleanEmoji = rx.emoji?.trim() || "";
+    if (cleanEmoji.length > 0) {
+      const rxList = reactionsByCard.get(rx.cardId) ?? [];
+      rxList.push({
+        ...rx,
+        emoji: cleanEmoji,
+      });
+      reactionsByCard.set(rx.cardId, rxList);
+    }
+  }
+
+  for (const rep of allReplies) {
+    const repAuthor = userById.get(rep.userId) ?? partner;
+    const replyList = repliesByCard.get(rep.cardId) ?? [];
+    const normalizedMediaType: "none" | "image" | "drawing" =
+      rep.mediaType === "drawing"
+        ? "drawing"
+        : rep.mediaType === "image" ||
+            rep.mediaType === "photo" ||
+            rep.mediaId != null
+          ? "image"
+          : "none";
+
+    replyList.push({
+      id: String(rep.id),
+      cardId: String(rep.cardId),
+      userId: rep.userId,
+      authorLabel:
+        rep.userId === viewerId
+          ? "Yo"
+          : resolveAuthorLabel(rep.userId, viewer, repAuthor),
+      authorAvatarId: repAuthor?.avatarId || "cat",
+      isMine: rep.userId === viewerId,
+      textContent: rep.textContent,
+      mediaType: normalizedMediaType,
+      mediaUrl: rep.mediaId ? `/api/media/${rep.mediaId}` : null,
+      createdAt: rep.createdAt,
+    });
+    repliesByCard.set(rep.cardId, replyList);
   }
 
   return rows.map((r) => ({
     ...r,
-    reactions: byCard.get(r.id) ?? [],
+    reactions: reactionsByCard.get(r.id) ?? [],
+    replies: repliesByCard.get(r.id) ?? [],
   }));
 }
 
@@ -111,7 +315,7 @@ export function getReceivedHomeCards(
     .offset(offset)
     .all();
 
-  const hydrated = attachReactions(rows);
+  const hydrated = attachReactionsAndReplies(rows, viewerId);
   return {
     latest: hydrated[0] ?? null,
     history: hydrated.slice(1),
@@ -155,7 +359,7 @@ export function getSentHomeCards(
     .offset(offset)
     .all();
 
-  return attachReactions(rows);
+  return attachReactionsAndReplies(rows, viewerId);
 }
 
 export function createHomeCard(input: {
@@ -333,6 +537,10 @@ export function deleteHomeCard(input: { cardId: number; authorId: number }) {
     throw new Error("Solo puedes eliminar las tarjetas que tú enviaste.");
   }
 
+  db.delete(homeCardReplies)
+    .where(eq(homeCardReplies.cardId, input.cardId))
+    .run();
+
   db.delete(homeCardReactions)
     .where(eq(homeCardReactions.cardId, input.cardId))
     .run();
@@ -340,53 +548,178 @@ export function deleteHomeCard(input: { cardId: number; authorId: number }) {
   db.delete(homeCards).where(eq(homeCards.id, input.cardId)).run();
 }
 
-export function reactToHomeCard(input: {
-  cardId: number;
-  userId: number;
-  emoji?: string | null;
-  presetText?: string | null;
-}) {
+export function replyToHomeCard(
+  user: AuthUser | number,
+  input: {
+    cardId?: string | number;
+    textContent?: string | null;
+    body?: string | null;
+    presetText?: string | null;
+    mediaType?: string | null;
+    mediaKind?: string | null;
+    mediaDataUrl?: string | null;
+    imageBase64?: string | null;
+    mediaId?: number | null;
+  },
+): HomeCardReplyDto {
+  const userObj: AuthUser =
+    typeof user === "number" ? { id: user } : user;
+
+  const numericCardId = Number(input.cardId);
+  if (!Number.isInteger(numericCardId) || numericCardId <= 0) {
+    throw new Error("Tarjeta no encontrada.");
+  }
+
   const card = db
     .select()
     .from(homeCards)
-    .where(eq(homeCards.id, input.cardId))
+    .where(eq(homeCards.id, numericCardId))
     .get();
   if (!card) {
     throw new Error("Tarjeta no encontrada.");
   }
 
-  const partner = getPartnerUser(input.userId);
-  if (card.authorId !== input.userId && card.authorId !== partner?.id) {
+  const coupleIds = getCoupleUserIds(userObj.id);
+  if (!coupleIds.includes(card.authorId)) {
+    throw new Error("No tienes permiso para responder a esta tarjeta.");
+  }
+
+  const rawDataUrl = (input.mediaDataUrl ?? input.imageBase64 ?? "").trim();
+  const requestedKind: "image" | "drawing" =
+    input.mediaType === "drawing" || input.mediaKind === "drawing"
+      ? "drawing"
+      : "image";
+
+  let mediaId: number | null = input.mediaId ?? null;
+  if (mediaId == null && rawDataUrl) {
+    mediaId = saveBase64Media({
+      dataUrl: rawDataUrl,
+      kind: requestedKind,
+      ownerId: userObj.id,
+    });
+  }
+
+  const cleanText = (
+    input.textContent ??
+    input.body ??
+    input.presetText ??
+    ""
+  ).trim();
+
+  if (cleanText.length === 0 && mediaId == null) {
+    throw new Error("Escribe una respuesta o adjunta una imagen o dibujo.");
+  }
+
+  const resolvedMediaType: "none" | "image" | "drawing" =
+    mediaId != null ? requestedKind : "none";
+
+  const nowIso = new Date().toISOString();
+  const inserted = db
+    .insert(homeCardReplies)
+    .values({
+      cardId: numericCardId,
+      userId: userObj.id,
+      textContent: cleanText,
+      mediaType: resolvedMediaType,
+      mediaId,
+      createdAt: nowIso,
+    })
+    .returning()
+    .get();
+
+  const dbUser = db
+    .select()
+    .from(users)
+    .where(eq(users.id, userObj.id))
+    .get();
+
+  return {
+    id: String(inserted.id),
+    cardId: String(inserted.cardId),
+    userId: inserted.userId,
+    authorLabel: "Yo",
+    authorAvatarId: dbUser?.avatarId || userObj.avatarId || "cat",
+    isMine: true,
+    textContent: inserted.textContent,
+    mediaType: resolvedMediaType,
+    mediaUrl: inserted.mediaId ? `/api/media/${inserted.mediaId}` : null,
+    createdAt: inserted.createdAt,
+  };
+}
+
+export function reactToHomeCard(
+  arg1:
+    | {
+        cardId: number | string;
+        userId: number;
+        emoji?: string | null;
+        presetText?: string | null;
+      }
+    | AuthUser
+    | number,
+  arg2?: {
+    cardId: number | string;
+    emoji?: string | null;
+    presetText?: string | null;
+  },
+): { removed: boolean; reply?: HomeCardReplyDto } {
+  const userId =
+    arg2 !== undefined
+      ? typeof arg1 === "number"
+        ? arg1
+        : (arg1 as AuthUser).id
+      : (arg1 as { userId: number }).userId;
+  const rawCardId =
+    arg2 !== undefined
+      ? arg2.cardId
+      : (arg1 as { cardId: number | string }).cardId;
+  const cardId = Number(rawCardId);
+  const emoji =
+    (arg2 !== undefined
+      ? arg2.emoji
+      : (arg1 as { emoji?: string | null }).emoji
+    )?.trim() || null;
+  const presetText =
+    (arg2 !== undefined
+      ? arg2.presetText
+      : (arg1 as { presetText?: string | null }).presetText
+    )?.trim() || null;
+
+  if (presetText && !emoji) {
+    const reply = replyToHomeCard(
+      { id: userId },
+      { cardId, textContent: presetText },
+    );
+    return { removed: false, reply };
+  }
+
+  const card = db
+    .select()
+    .from(homeCards)
+    .where(eq(homeCards.id, cardId))
+    .get();
+  if (!card) {
+    throw new Error("Tarjeta no encontrada.");
+  }
+
+  const coupleIds = getCoupleUserIds(userId);
+  if (!coupleIds.includes(card.authorId)) {
     throw new Error("No tienes permiso para reaccionar a esta tarjeta.");
   }
 
-  const emoji = input.emoji?.trim() || null;
-  const presetText = input.presetText?.trim() || null;
-
-  const existing = db
+  const existingEmojiReactions = db
     .select()
     .from(homeCardReactions)
-    .where(eq(homeCardReactions.cardId, input.cardId))
+    .where(eq(homeCardReactions.cardId, cardId))
     .all()
-    .find((r) => r.userId === input.userId);
+    .filter((r) => r.userId === userId && Boolean(r.emoji));
 
-  // If both are empty or user tapped the exact same emoji/presetText again, remove their reaction
-  if (
-    (!emoji && !presetText) ||
-    (existing &&
-      emoji &&
-      !presetText &&
-      existing.emoji === emoji &&
-      !existing.presetText) ||
-    (existing &&
-      presetText &&
-      !emoji &&
-      existing.presetText === presetText &&
-      !existing.emoji)
-  ) {
-    if (existing) {
+  const existing = existingEmojiReactions[0];
+
+  if (!emoji || (existing && existing.emoji === emoji)) {
+    for (const row of existingEmojiReactions) {
       db.delete(homeCardReactions)
-        .where(eq(homeCardReactions.id, existing.id))
+        .where(eq(homeCardReactions.id, row.id))
         .run();
     }
     return { removed: true };
@@ -395,19 +728,23 @@ export function reactToHomeCard(input: {
   if (existing) {
     db.update(homeCardReactions)
       .set({
-        emoji: emoji ?? existing.emoji,
-        presetText: presetText ?? existing.presetText,
+        emoji,
         createdAt: new Date(),
       })
       .where(eq(homeCardReactions.id, existing.id))
       .run();
+    for (const extra of existingEmojiReactions.slice(1)) {
+      db.delete(homeCardReactions)
+        .where(eq(homeCardReactions.id, extra.id))
+        .run();
+    }
   } else {
     db.insert(homeCardReactions)
       .values({
-        cardId: input.cardId,
-        userId: input.userId,
+        cardId,
+        userId,
         emoji,
-        presetText,
+        presetText: null,
         createdAt: new Date(),
       })
       .run();

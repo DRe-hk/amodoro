@@ -150,7 +150,7 @@ class _DecideSheetState extends State<DecideSheet> {
           padding: const EdgeInsets.fromLTRB(22, 16, 22, 24),
           decoration: AmodoroTheme.cardOutlineBox(
             color: surface,
-            radius: 30,
+            radius: 32,
             borderColor: isDark ? const Color(0xFF383232) : const Color(0xFFE2DAD0),
             borderWidth: 2.5,
             subtleShadow: false,
@@ -203,10 +203,10 @@ class _DecideSheetState extends State<DecideSheet> {
                       padding: const EdgeInsets.all(18),
                       decoration: AmodoroTheme.cardOutlineBox(
                         color: winnerColor,
-                        radius: 24,
+                        radius: 32,
                         borderColor:
                             AmodoroTheme.darkenForPerspective(winnerColor, 0.16),
-                        borderWidth: 2.0,
+                        borderWidth: 2.5,
                         subtleShadow: false,
                       ),
                       child: Column(
@@ -347,9 +347,9 @@ class _DecideSheetState extends State<DecideSheet> {
                   margin: const EdgeInsets.only(bottom: 14),
                   decoration: AmodoroTheme.cardOutlineBox(
                     color: const Color(0xFFFFDAD6),
-                    radius: 16,
+                    radius: 32,
                     borderColor: const Color(0xFFE5B5B0),
-                    borderWidth: 2.0,
+                    borderWidth: 2.5,
                     subtleShadow: false,
                   ),
                   child: Text(
@@ -368,11 +368,11 @@ class _DecideSheetState extends State<DecideSheet> {
                   padding: const EdgeInsets.all(22),
                   decoration: AmodoroTheme.cardOutlineBox(
                     color: cardSurface,
-                    radius: 26,
+                    radius: 32,
                     borderColor: isDark
                         ? const Color(0xFF383232)
                         : const Color(0xFFE2DAD0),
-                    borderWidth: 2.0,
+                    borderWidth: 2.5,
                     subtleShadow: false,
                   ),
                   child: Column(
@@ -421,11 +421,11 @@ class _DecideSheetState extends State<DecideSheet> {
                   padding: const EdgeInsets.all(18),
                   decoration: AmodoroTheme.cardOutlineBox(
                     color: cardSurface,
-                    radius: 26,
+                    radius: 32,
                     borderColor: isDark
                         ? const Color(0xFF383232)
                         : const Color(0xFFE2DAD0),
-                    borderWidth: 2.0,
+                    borderWidth: 2.5,
                     subtleShadow: false,
                   ),
                   child: Column(
@@ -470,11 +470,11 @@ class _DecideSheetState extends State<DecideSheet> {
                             color: isDark
                                 ? const Color(0xFF2C243B)
                                 : const Color(0xFFE8DEF8),
-                            radius: 22,
+                            radius: 32,
                             borderColor: isDark
                                 ? const Color(0xFF4C3C68)
                                 : const Color(0xFFC7B6E2),
-                            borderWidth: 2.0,
+                            borderWidth: 2.5,
                             subtleShadow: false,
                           ),
                           child: Column(
@@ -564,12 +564,12 @@ class _DecideSheetState extends State<DecideSheet> {
                             padding: const EdgeInsets.all(12),
                             decoration: AmodoroTheme.cardOutlineBox(
                               color: candColor,
-                              radius: 18,
+                              radius: 32,
                               borderColor: AmodoroTheme.darkenForPerspective(
                                 candColor,
                                 0.16,
                               ),
-                              borderWidth: 2.0,
+                              borderWidth: 2.5,
                               subtleShadow: false,
                             ),
                             child: Row(

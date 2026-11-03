@@ -31,7 +31,7 @@ class CreateCardScreen extends StatefulWidget {
 
 class _CreateCardScreenState extends State<CreateCardScreen> {
   final TextEditingController _textController = TextEditingController();
-  late final TextEditingController _altTextController;
+  final FocusNode _cardTextFocusNode = FocusNode();
   final TextEditingController _linkController = TextEditingController();
   final DrawingCanvasController _drawingController = DrawingCanvasController();
   final ImagePicker _picker = ImagePicker();
@@ -68,7 +68,6 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   void initState() {
     super.initState();
     final card = _targetEditingCard;
-    _altTextController = TextEditingController(text: card?.altText ?? '');
 
     if (card != null) {
       _textController.text = card.textContent;
@@ -119,13 +118,19 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   @override
   void dispose() {
     _textController.dispose();
-    _altTextController.dispose();
+    _cardTextFocusNode.dispose();
     _linkController.dispose();
     _drawingController.dispose();
     super.dispose();
   }
 
+  void _unfocusCardText() {
+    _cardTextFocusNode.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
   Future<void> _pickImage(ImageSource source) async {
+    _unfocusCardText();
     try {
       final XFile? picked = await _picker.pickImage(
         source: source,
@@ -150,6 +155,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   }
 
   void _openDrawingMode() {
+    _unfocusCardText();
     setState(() {
       _mediaType = 'drawing';
       _imageDataUrl = null;
@@ -205,6 +211,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   }
 
   Future<void> _openLinkDialog() async {
+    _unfocusCardText();
     final linkCtrl = TextEditingController(text: _linkController.text);
     final rawUrl = await showDialog<String>(
       context: context,
@@ -277,7 +284,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                       child: AmodoroPressableButton(
                         onTap: () => Navigator.pop(ctx, null),
                         height: 44,
-                        radius: 16,
+                        radius: 999,
                         color: boxSurface,
                         borderColor: borderCol,
                         borderWidth: 1.5,
@@ -301,7 +308,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                       child: AmodoroPressableButton(
                         onTap: () => Navigator.pop(ctx, linkCtrl.text.trim()),
                         height: 44,
-                        radius: 16,
+                        radius: 999,
                         color: isDark
                             ? AmodoroTheme.coralPillDark
                             : AmodoroTheme.coralPillLight,
@@ -347,7 +354,6 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   Future<void> _submitCard() async {
     final editingCard = _targetEditingCard;
     final text = _textController.text.trim();
-    final altTextVal = _altTextController.text.trim();
 
     String finalMediaType = 'none';
     String? finalMediaDataUrl;
@@ -393,10 +399,6 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     }
 
     final fontSizeKey = _sizeKeyFromPx(_fontSizePx);
-    final effectiveAltText =
-        (finalMediaType == 'image' || finalMediaType == 'drawing')
-            ? altTextVal
-            : '';
 
     setState(() => _sending = true);
     try {
@@ -411,7 +413,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
           mediaType: keepExisting ? _existingRemoteMediaType : finalMediaType,
           keepExistingMedia: keepExisting,
           mediaDataUrl: finalMediaDataUrl,
-          altText: effectiveAltText,
+          altText: null,
           linkUrl: finalMediaType == 'link' ? _linkPreview?.url : null,
           linkTitle: finalMediaType == 'link' ? _linkPreview?.title : null,
           linkThumbnail:
@@ -428,7 +430,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
           fontSizePx: _fontSizePx,
           mediaType: finalMediaType,
           mediaDataUrl: finalMediaDataUrl,
-          altText: effectiveAltText,
+          altText: null,
           linkUrl: linkUrl,
           linkTitle: linkTitle,
           linkThumbnail: linkThumbnail,
@@ -480,7 +482,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                     onTap: () => Navigator.of(context).pop(false),
                     width: 44,
                     height: 40,
-                    radius: 14,
+                    radius: 999,
                     color: capsuleSurface,
                     borderColor: capsuleBorder,
                     borderWidth: 1.5,
@@ -511,7 +513,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                 padding: const EdgeInsets.all(20),
                 decoration: AmodoroTheme.cardOutlineBox(
                   color: selectedBgColor,
-                  radius: 32,
+                  radius: 36,
                   borderColor: AmodoroTheme.darkenForPerspective(
                     selectedBgColor,
                     0.12,
@@ -524,55 +526,13 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                     // Top Media Section (2x2 Pressable Grid or Selected Media)
                     _buildTopMediaSection(selectedBgColor, cardInk),
 
-                    // Optional Alt Text / Image Note when _mediaType == 'image' || _mediaType == 'drawing'
-                    if (_mediaType == 'image' || _mediaType == 'drawing') ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 2,
-                        ),
-                        decoration: AmodoroTheme.cardOutlineBox(
-                          color: Colors.white.withValues(alpha: 0.65),
-                          radius: 16,
-                          borderColor: AmodoroTheme.darkenForPerspective(
-                            selectedBgColor,
-                            0.14,
-                          ),
-                          borderWidth: 1.5,
-                          subtleShadow: false,
-                        ),
-                        child: TextField(
-                          controller: _altTextController,
-                          maxLines: 2,
-                          minLines: 1,
-                          style: AmodoroTheme.googleSans(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: AmodoroTheme.lightInk,
-                          ),
-                          decoration: InputDecoration(
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding:
-                                const EdgeInsets.symmetric(vertical: 10),
-                            hintText:
-                                'Nota o descripción de la imagen (opcional)...',
-                            hintStyle: AmodoroTheme.googleSans(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AmodoroTheme.lightMuted,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-
                     const SizedBox(height: 18),
 
                     // Direct text editor inside the card
                     TextField(
                       controller: _textController,
+                      focusNode: _cardTextFocusNode,
+                      onTapOutside: (_) => _cardTextFocusNode.unfocus(),
                       maxLines: null,
                       minLines: 4,
                       style: AmodoroTheme.getCardTextStyle(
@@ -632,7 +592,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
               AmodoroPressableButton(
                 onTap: _sending ? null : _submitCard,
                 height: 52,
-                radius: 18,
+                radius: 999,
                 color: isDark
                     ? AmodoroTheme.coralPillDark
                     : AmodoroTheme.coralPillLight,
@@ -709,7 +669,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
         child: Container(
           decoration: AmodoroTheme.cardOutlineBox(
             color: canvasOuterColor,
-            radius: 24,
+            radius: 28,
             borderColor: containerBorder,
             borderWidth: 2.0,
             subtleShadow: false,
@@ -739,14 +699,14 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
           children: [
             Container(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(28),
                 border: Border.all(
                   color: Colors.white.withValues(alpha: 0.65),
                   width: 2.0,
                 ),
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(22),
+                borderRadius: BorderRadius.circular(26),
                 child: Container(
                   color: canvasOuterColor,
                   child: _buildExistingMediaPreview(_existingRemoteMediaUrl!),
@@ -773,14 +733,14 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
           children: [
             Container(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(28),
                 border: Border.all(
                   color: Colors.white.withValues(alpha: 0.65),
                   width: 2.0,
                 ),
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(22),
+                borderRadius: BorderRadius.circular(26),
                 child: Image.memory(
                   bytes,
                   width: double.infinity,
@@ -804,7 +764,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
         padding: const EdgeInsets.all(12),
         decoration: AmodoroTheme.cardOutlineBox(
           color: canvasOuterColor,
-          radius: 24,
+          radius: 28,
           borderColor: containerBorder,
           borderWidth: 2.0,
           subtleShadow: false,
@@ -853,7 +813,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
         padding: const EdgeInsets.all(14),
         decoration: AmodoroTheme.cardOutlineBox(
           color: canvasOuterColor,
-          radius: 26,
+          radius: 28,
           borderColor: containerBorder,
           borderWidth: 2.0,
           subtleShadow: false,
@@ -938,7 +898,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       borderWidth: 1.5,
       lipColor: edgeColor,
       lipHeight: 3.2,
-      radius: 20,
+      radius: 28,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -992,6 +952,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   }
 
   Future<void> _showFontPicker() async {
+    _unfocusCardText();
     final chosen = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1010,7 +971,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
               padding: const EdgeInsets.all(20),
               decoration: AmodoroTheme.cardOutlineBox(
                 color: surface,
-                radius: 28,
+                radius: 34,
                 borderColor: borderCol,
                 borderWidth: 2.5,
               ),
@@ -1025,7 +986,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                     child: AmodoroPressableButton(
                       onTap: () => Navigator.of(ctx).pop(key),
                       height: 44,
-                      radius: 14,
+                      radius: 999,
                       color: selected
                           ? (isDark
                               ? AmodoroTheme.coralPillDark
@@ -1061,12 +1022,15 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
         );
       },
     );
+    _unfocusCardText();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _unfocusCardText());
     if (chosen != null && mounted) {
       setState(() => _fontFamily = chosen);
     }
   }
 
   Future<void> _showSizePicker() async {
+    _unfocusCardText();
     final chosen = await showModalBottomSheet<int>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1085,7 +1049,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
               padding: const EdgeInsets.all(20),
               decoration: AmodoroTheme.cardOutlineBox(
                 color: surface,
-                radius: 28,
+                radius: 34,
                 borderColor: borderCol,
                 borderWidth: 2.5,
               ),
@@ -1099,7 +1063,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                     child: AmodoroPressableButton(
                       onTap: () => Navigator.of(ctx).pop(px),
                       height: 44,
-                      radius: 14,
+                      radius: 999,
                       color: selected
                           ? (isDark
                               ? AmodoroTheme.coralPillDark
@@ -1135,12 +1099,15 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
         );
       },
     );
+    _unfocusCardText();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _unfocusCardText());
     if (chosen != null && mounted) {
       setState(() => _fontSizePx = chosen);
     }
   }
 
   Future<void> _showColorPicker() async {
+    _unfocusCardText();
     final chosen = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1148,7 +1115,6 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         final surface =
             isDark ? AmodoroTheme.darkBackground : AmodoroTheme.lightBackground;
-        final ink = isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk;
         final borderCol =
             isDark ? const Color(0xFF383232) : const Color(0xFFE9E4DC);
 
@@ -1159,7 +1125,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
               padding: const EdgeInsets.all(20),
               decoration: AmodoroTheme.cardOutlineBox(
                 color: surface,
-                radius: 28,
+                radius: 34,
                 borderColor: borderCol,
                 borderWidth: 2.5,
               ),
@@ -1169,11 +1135,13 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                 children: AmodoroTheme.pastelPresets.map((preset) {
                   final selected =
                       preset.hex.toUpperCase() == _bgColor.toUpperCase();
+                  final presetInk =
+                      AmodoroTheme.getContrastingInk(preset.color);
                   return AmodoroPressableButton(
                     onTap: () => Navigator.of(ctx).pop(preset.hex),
                     height: 42,
                     padding: const EdgeInsets.symmetric(horizontal: 14),
-                    radius: 14,
+                    radius: 999,
                     color: preset.color,
                     borderColor: selected
                         ? AmodoroTheme.coralPillLight
@@ -1193,7 +1161,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                             fontSize: 11.5,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.8,
-                            color: ink,
+                            color: presetInk,
                           ),
                         ),
                       ],
@@ -1206,6 +1174,8 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
         );
       },
     );
+    _unfocusCardText();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _unfocusCardText());
     if (chosen != null && mounted) {
       setState(() => _bgColor = chosen);
     }
@@ -1231,7 +1201,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       borderWidth: 1.5,
       lipColor: lipCol,
       lipHeight: 2.8,
-      radius: 16,
+      radius: 999,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -1270,7 +1240,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       borderWidth: 1.5,
       lipColor: lipCol,
       lipHeight: 2.8,
-      radius: 16,
+      radius: 999,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -1318,7 +1288,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       borderWidth: 1.5,
       lipColor: lipCol,
       lipHeight: 2.8,
-      radius: 16,
+      radius: 999,
       child: Row(
         children: [
           Container(

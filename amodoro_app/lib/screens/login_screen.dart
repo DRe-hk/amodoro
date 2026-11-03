@@ -347,7 +347,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
                   decoration: AmodoroTheme.cardOutlineBox(
                     color: cardBg,
-                    radius: 32,
+                    radius: 34,
                     borderColor: borderColor,
                     borderWidth: 2.5,
                   ),
@@ -397,12 +397,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       if (user == null) ...[
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
+                            horizontal: 18,
                             vertical: 2,
                           ),
                           decoration: AmodoroTheme.cardOutlineBox(
                             color: fieldBg,
-                            radius: 18,
+                            radius: 999,
                             borderColor: borderColor,
                             borderWidth: 2.5,
                             subtleShadow: false,
@@ -429,12 +429,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
+                          horizontal: 18,
                           vertical: 2,
                         ),
                         decoration: AmodoroTheme.cardOutlineBox(
                           color: fieldBg,
-                          radius: 18,
+                          radius: 999,
                           borderColor: borderColor,
                           borderWidth: 2.5,
                           subtleShadow: false,
@@ -488,7 +488,7 @@ class _LoginScreenState extends State<LoginScreen> {
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+              padding: const EdgeInsets.fromLTRB(22, 10, 22, 18),
               child: showWelcomePin
                   ? _buildWelcomePinFlow(context, rememberedUser, isDark)
                   : _buildAccountSetupFlow(context, isDark),
@@ -612,9 +612,9 @@ class _LoginScreenState extends State<LoginScreen> {
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
             decoration: AmodoroTheme.cardOutlineBox(
               color: cardBg,
-              radius: 32,
+              radius: 36,
               borderColor: borderColor,
-              borderWidth: 2.5,
+              borderWidth: 3.0,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -868,10 +868,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
           // Tu nombre input (border-only 2.5px)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 2),
             decoration: AmodoroTheme.cardOutlineBox(
               color: fieldBg,
-              radius: 18,
+              radius: 999,
               borderColor: borderColor,
               borderWidth: 2.5,
               subtleShadow: false,
@@ -938,10 +938,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
           if (showInviteInput) ...[
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 2),
               decoration: AmodoroTheme.cardOutlineBox(
                 color: fieldBg,
-                radius: 18,
+                radius: 999,
                 borderColor: borderColor,
                 borderWidth: 2.5,
                 subtleShadow: false,
@@ -1118,7 +1118,7 @@ class _LoginScreenState extends State<LoginScreen> {
       padding: const EdgeInsets.all(16),
       decoration: AmodoroTheme.cardOutlineBox(
         color: bgColor,
-        radius: 22,
+        radius: 28,
         borderColor: borderColor,
         borderWidth: 2.5,
         subtleShadow: false,
@@ -1209,10 +1209,10 @@ class _LoginScreenState extends State<LoginScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 2),
           decoration: AmodoroTheme.cardOutlineBox(
             color: fieldBg,
-            radius: 18,
+            radius: 999,
             borderColor: borderColor,
             borderWidth: 2.5,
             subtleShadow: false,

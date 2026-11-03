@@ -141,6 +141,7 @@ export async function GET(request: Request) {
       fontSizePx: c.fontSizePx || 18,
       createdAt: c.createdAt.toISOString(),
       reactions: c.reactions.map(serializeReaction),
+      replies: c.replies ?? [],
     };
   };
 

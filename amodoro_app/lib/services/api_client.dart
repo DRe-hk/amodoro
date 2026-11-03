@@ -680,6 +680,40 @@ class AmodoroApiClient {
     }
   }
 
+  Future<void> replyToHomeCard({
+    required String cardId,
+    String textContent = '',
+    String mediaType = 'none',
+    String? mediaDataUrl,
+  }) async {
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$_baseUrl/api/v1/home'),
+            headers: _headers(),
+            body: jsonEncode({
+              'action': 'reply_card',
+              'cardId': cardId,
+              'textContent': textContent.trim(),
+              'mediaType': mediaType,
+              'mediaDataUrl': mediaDataUrl ?? '',
+              'imageBase64': mediaDataUrl ?? '',
+            }),
+          )
+          .timeout(const Duration(seconds: 25));
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      if (res.statusCode >= 400 || body['ok'] != true) {
+        throw AmodoroApiException(
+          (body['error'] ?? 'No se pudo enviar la respuesta.').toString(),
+        );
+      }
+    } catch (e) {
+      throw AmodoroApiException(
+        _cleanError(e, 'No se pudo enviar la respuesta.'),
+      );
+    }
+  }
+
   Future<void> createBoard({
     required String title,
     required String icon,

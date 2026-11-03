@@ -248,7 +248,7 @@ class InteractiveDrawingPad extends StatelessWidget {
               child: Container(
                 decoration: AmodoroTheme.cardOutlineBox(
                   color: const Color(0xFFFFFDF9),
-                  radius: 22,
+                  radius: 28,
                   borderColor: isDark
                       ? const Color(0xFF383232)
                       : const Color(0xFFDDD5C8),
@@ -256,7 +256,7 @@ class InteractiveDrawingPad extends StatelessWidget {
                   subtleShadow: false,
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(26),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final scaleX = 600.0 / constraints.maxWidth;

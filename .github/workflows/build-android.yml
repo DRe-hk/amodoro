@@ -30,6 +30,7 @@ jobs:
       - name: Generate platform directories, configure Firebase, Share Intent, Manifest & Coral "a" icon
         working-directory: amodoro_app
         run: |
+          mkdir -p assets/avatars
           flutter create . --project-name amodoro_app --org com.amodoro --platforms android,ios,web
           pip3 install --quiet Pillow
           curl -sL "https://raw.githubusercontent.com/google/fonts/main/ofl/playwriteustradguides/PlaywriteUSTradGuides-Regular.ttf" -o /tmp/PlaywriteUSTradGuides-Regular.ttf
@@ -266,8 +267,8 @@ jobs:
       - name: Publish GitHub Release with APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.5.0
-          name: "amodoro v1.5.0 (Neo-Pastel + Security + PIN + Historial + FCM)"
+          tag_name: v1.6.0
+          name: "amodoro v1.6.0 (Circular UI + Card Replies + Emoji Dock + Avatars)"
           files: |
             amodoro.apk
             amodoro-arm64.apk

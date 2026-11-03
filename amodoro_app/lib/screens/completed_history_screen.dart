@@ -176,7 +176,7 @@ class _CompletedHistoryScreenState extends State<CompletedHistoryScreen> {
                     onTap: () => Navigator.of(context).pop(),
                     width: 48,
                     height: 48,
-                    radius: 16,
+                    radius: 999,
                     color: isDark ? AmodoroTheme.darkContainer : Colors.white,
                     borderColor: isDark
                         ? const Color(0xFF383232)
@@ -225,7 +225,7 @@ class _CompletedHistoryScreenState extends State<CompletedHistoryScreen> {
                     ),
                     decoration: AmodoroTheme.cardOutlineBox(
                       color: const Color(0xFF10B981).withValues(alpha: 0.14),
-                      radius: 16,
+                      radius: 999,
                       borderColor: const Color(0xFF10B981),
                       borderWidth: 1.8,
                       subtleShadow: false,
@@ -258,10 +258,10 @@ class _CompletedHistoryScreenState extends State<CompletedHistoryScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
                 decoration: AmodoroTheme.cardOutlineBox(
                   color: isDark ? AmodoroTheme.darkContainer : Colors.white,
-                  radius: 18,
+                  radius: 999,
                   borderColor: isDark
                       ? const Color(0xFF383232)
                       : const Color(0xFFE9E4DC),
@@ -439,15 +439,23 @@ class _CompletedHistoryScreenState extends State<CompletedHistoryScreen> {
             : '';
     final hasMemoryText =
         item.completionText != null && item.completionText!.trim().isNotEmpty;
+    final myReaction = item.reactions
+        .where((r) =>
+            r.userId == _sync.me.id && r.emoji != null && r.emoji!.isNotEmpty)
+        .firstOrNull;
+    final partnerReaction = item.reactions
+        .where((r) =>
+            r.userId != _sync.me.id && r.emoji != null && r.emoji!.isNotEmpty)
+        .firstOrNull;
 
     return Container(
       padding: const EdgeInsets.all(20),
       // Strict Button vs Non-Button Rule: Border-only container, NO 3D bottom lip!
       decoration: AmodoroTheme.cardOutlineBox(
         color: isDark ? AmodoroTheme.darkContainer : Colors.white,
-        radius: 28,
+        radius: 36,
         borderColor: itemAccentColor,
-        borderWidth: 2.5,
+        borderWidth: 3.0,
         subtleShadow: true,
       ),
       child: Column(
@@ -536,7 +544,7 @@ class _CompletedHistoryScreenState extends State<CompletedHistoryScreen> {
             ),
           ],
 
-          // 3. Memory Photo / Image (1:1 square, radius 22, tappable for FullscreenMediaViewer)
+          // 3. Memory Photo / Image (1:1 square, radius 28, tappable for FullscreenMediaViewer)
           if (resolvedMediaUrl.isNotEmpty) ...[
             const SizedBox(height: 14),
             GestureDetector(
@@ -550,7 +558,7 @@ class _CompletedHistoryScreenState extends State<CompletedHistoryScreen> {
                 child: AspectRatio(
                   aspectRatio: 1.0,
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(22),
+                    borderRadius: BorderRadius.circular(28),
                     child: _buildMediaImage(resolvedMediaUrl),
                   ),
                 ),
@@ -568,7 +576,7 @@ class _CompletedHistoryScreenState extends State<CompletedHistoryScreen> {
                 color: isDark
                     ? const Color(0xFF2D2727)
                     : const Color(0xFFFAF6F0),
-                radius: 18,
+                radius: 22,
                 borderColor: itemAccentColor.withValues(alpha: 0.45),
                 borderWidth: 1.5,
                 subtleShadow: false,
@@ -636,21 +644,93 @@ class _CompletedHistoryScreenState extends State<CompletedHistoryScreen> {
             ],
           ),
 
-          // Existing reactions chips
-          if (item.reactions.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: item.reactions.map((r) {
-                final label = r.emoji != null && r.emoji!.isNotEmpty
-                    ? r.emoji!
-                    : (r.presetText ?? '❤️');
-                return Container(
+          const SizedBox(height: 12),
+
+          // Emoji Reaction Dock (Before me reacts -> circular dock of reactionEmojis at fontSize 22; After me reacts -> only chosen emoji at fontSize 23) + partner's reaction
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (myReaction == null)
+                Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
+                    horizontal: 8,
                     vertical: 5,
                   ),
+                  decoration: AmodoroTheme.cardOutlineBox(
+                    color: isDark
+                        ? const Color(0xFF2D2727)
+                        : const Color(0xFFFAF6F0),
+                    radius: 999,
+                    borderColor: itemAccentColor.withValues(alpha: 0.5),
+                    borderWidth: 1.5,
+                    subtleShadow: false,
+                  ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: emojis.map((emoji) {
+                        final isBusy = _reactingItemId == '${item.id}_$emoji';
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 3),
+                          child: AmodoroPressableButton(
+                            onTap: isBusy
+                                ? null
+                                : () => _toggleReaction(item, emoji),
+                            width: 38,
+                            height: 38,
+                            radius: 999,
+                            color: isDark
+                                ? AmodoroTheme.darkContainer
+                                : Colors.white,
+                            borderColor: isDark
+                                ? const Color(0xFF3E3636)
+                                : const Color(0xFFE2DCD3),
+                            borderWidth: 1.2,
+                            lipColor: isDark
+                                ? const Color(0xFF221D1D)
+                                : const Color(0xFFD5CEC4),
+                            lipHeight: 2.2,
+                            child: Text(
+                              emoji,
+                              style: const TextStyle(
+                                fontSize: 22,
+                                height: 1.05,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                )
+              else
+                AmodoroPressableButton(
+                  onTap: _reactingItemId != null
+                      ? null
+                      : () => _toggleReaction(item, myReaction.emoji!),
+                  height: 42,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  radius: 999,
+                  color: itemAccentColor.withValues(alpha: 0.16),
+                  borderColor: itemAccentColor,
+                  borderWidth: 2.0,
+                  lipColor: itemAccentColor,
+                  lipHeight: 2.6,
+                  child: Text(
+                    myReaction.emoji!,
+                    style: const TextStyle(
+                      fontSize: 23,
+                      height: 1.05,
+                    ),
+                  ),
+                ),
+              if (partnerReaction != null)
+                Container(
+                  height: 42,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: AmodoroTheme.cardOutlineBox(
                     color: isDark
                         ? const Color(0xFF2D2727)
@@ -659,79 +739,40 @@ class _CompletedHistoryScreenState extends State<CompletedHistoryScreen> {
                     borderColor: isDark
                         ? const Color(0xFF3E3636)
                         : const Color(0xFFE5DDD3),
-                    borderWidth: 1.2,
+                    borderWidth: 1.4,
                     subtleShadow: false,
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       FlatAvatarBadge(
-                        avatarId: r.authorAvatarId,
-                        size: 18,
+                        avatarId: partnerReaction.authorAvatarId,
+                        size: 20,
+                        borderWidth: 1.2,
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        label,
-                        style: AmodoroTheme.googleSans(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: ink,
+                        partnerReaction.emoji!,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          height: 1.05,
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        r.authorLabel,
-                        style: AmodoroTheme.googleSans(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          color: muted,
+                      if (partnerReaction.authorLabel.isNotEmpty) ...[
+                        const SizedBox(width: 5),
+                        Text(
+                          partnerReaction.authorLabel,
+                          style: AmodoroTheme.googleSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: muted,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
-                );
-              }).toList(),
-            ),
-          ],
-
-          const SizedBox(height: 12),
-
-          // Emoji reaction pressable buttons (with bottom lip)
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: emojis.map((emoji) {
-              final myReaction = item.reactions.any(
-                (r) => r.userId == _sync.me.id && r.emoji == emoji,
-              );
-              final isBusy = _reactingItemId == '${item.id}_$emoji';
-
-              return AmodoroPressableButton(
-                onTap: isBusy ? null : () => _toggleReaction(item, emoji),
-                height: 36,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                radius: 12,
-                color: myReaction
-                    ? itemAccentColor
-                    : (isDark ? const Color(0xFF2D2727) : Colors.white),
-                borderColor: myReaction
-                    ? null
-                    : (isDark
-                        ? const Color(0xFF3E3636)
-                        : const Color(0xFFE2DCD3)),
-                borderWidth: myReaction ? 0 : 1.5,
-                lipColor: myReaction
-                    ? AmodoroTheme.darkenForPerspective(itemAccentColor, 0.18)
-                    : (isDark
-                        ? const Color(0xFF221D1D)
-                        : const Color(0xFFD5CEC4)),
-                lipHeight: 2.6,
-                child: Text(
-                  emoji,
-                  style: const TextStyle(fontSize: 15),
                 ),
-              );
-            }).toList(),
+            ],
           ),
         ],
       ),

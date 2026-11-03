@@ -8,6 +8,7 @@ import {
   createHomeCard,
   deleteHomeCard,
   reactToHomeCard,
+  replyToHomeCard,
   updateHomeCard,
 } from "@/lib/home-cards";
 import { fetchLinkPreview } from "@/lib/link-preview";
@@ -82,7 +83,13 @@ export async function POST(request: Request) {
 
   try {
     const payload = (await request.json()) as {
-      action: "create_card" | "update_card" | "delete_card" | "react";
+      action:
+        | "create_card"
+        | "update_card"
+        | "delete_card"
+        | "react"
+        | "reply_card"
+        | "reply";
       body?: string;
       textContent?: string;
       altText?: string | null;
@@ -228,6 +235,22 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: true });
     }
 
+    if (payload.action === "reply_card" || payload.action === "reply") {
+      const reply = replyToHomeCard(user, payload);
+      void sendPushToPartner(user.id, {
+        title: "Nueva respuesta en amodoro 💬",
+        body: reply.textContent
+          ? `${user.displayName}: "${reply.textContent}"`
+          : `${user.displayName} respondió con una imagen`,
+        data: {
+          type: "reply",
+          cardId: String(reply.cardId),
+          replyId: String(reply.id),
+        },
+      });
+      return jsonResponse({ ok: true, reply });
+    }
+
     if (payload.action === "react") {
       const cardId = Number(payload.cardId);
       if (!Number.isInteger(cardId)) {
@@ -251,7 +274,7 @@ export async function POST(request: Request) {
         });
       }
 
-      return jsonResponse({ ok: true, removed: res.removed });
+      return jsonResponse({ ok: true, removed: res.removed, reply: res.reply });
     }
 
     return jsonResponse({ ok: false, error: "Acción desconocida" }, 400);

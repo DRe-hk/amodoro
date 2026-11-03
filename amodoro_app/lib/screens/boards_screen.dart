@@ -247,7 +247,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                             onTap: () => Navigator.of(ctx).pop(false),
                             width: 36,
                             height: 36,
-                            radius: 12,
+                            radius: 999,
                             color: isDark
                                 ? const Color(0xFF2D2727)
                                 : Colors.white,
@@ -298,7 +298,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                 color: isDark
                                     ? const Color(0xFF2D2727)
                                     : Colors.white,
-                                radius: 18,
+                                radius: 999,
                                 borderColor: bColor,
                                 borderWidth: 2.0,
                                 subtleShadow: false,
@@ -327,8 +327,8 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                       _showBoardSubmenu(existing: b);
                                     },
                                     width: 34,
-                                    height: 32,
-                                    radius: 10,
+                                    height: 34,
+                                    radius: 999,
                                     color: isDark
                                         ? AmodoroTheme.darkContainer
                                         : const Color(0xFFF6EFE6),
@@ -351,8 +351,8 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                           }
                                         : null,
                                     width: 34,
-                                    height: 32,
-                                    radius: 10,
+                                    height: 34,
+                                    radius: 999,
                                     color: isDark
                                         ? AmodoroTheme.darkContainer
                                         : const Color(0xFFF6EFE6),
@@ -377,8 +377,8 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                           }
                                         : null,
                                     width: 34,
-                                    height: 32,
-                                    radius: 10,
+                                    height: 34,
+                                    radius: 999,
                                     color: isDark
                                         ? AmodoroTheme.darkContainer
                                         : const Color(0xFFF6EFE6),
@@ -427,7 +427,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                 }
                               },
                         height: 48,
-                        radius: 18,
+                        radius: 999,
                         color: AmodoroTheme.coralPillLight,
                         lipColor: AmodoroTheme.coralPillBorderLight,
                         lipHeight: 3.5,
@@ -520,7 +520,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                             onTap: () => Navigator.of(ctx).pop(false),
                             width: 36,
                             height: 36,
-                            radius: 12,
+                            radius: 999,
                             color: boxSurface,
                             borderColor: isDark
                                 ? const Color(0xFF3E3636)
@@ -537,10 +537,10 @@ class _BoardsScreenState extends State<BoardsScreen> {
                       ),
                       const SizedBox(height: 14),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                         decoration: AmodoroTheme.cardOutlineBox(
                           color: boxSurface,
-                          radius: 18,
+                          radius: 999,
                           borderColor: isDark
                               ? const Color(0xFF3E3636)
                               : const Color(0xFFE9E4DC),
@@ -592,7 +592,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                 setModalState(() => selectedIcon = key),
                             width: 44,
                             height: 44,
-                            radius: 14,
+                            radius: 999,
                             color: sel ? activeColor : boxSurface,
                             borderColor: sel
                                 ? null
@@ -637,7 +637,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                 setModalState(() => selectedColor = p.hex),
                             width: 38,
                             height: 38,
-                            radius: 99,
+                            radius: 999,
                             color: p.color,
                             borderColor: sel ? ink : null,
                             borderWidth: sel ? 2.2 : 0,
@@ -677,7 +677,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                           if (ctx.mounted) Navigator.pop(ctx, true);
                         },
                         height: 48,
-                        radius: 18,
+                        radius: 999,
                         color: AmodoroTheme.parseHexColor(
                           selectedColor,
                           fallback: AmodoroTheme.coralPillLight,
@@ -711,7 +711,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                             if (ctx.mounted) Navigator.pop(ctx, true);
                           },
                           height: 46,
-                          radius: 18,
+                          radius: 999,
                           color: const Color(0xFFFFDAD6),
                           lipColor: const Color(0xFFE59890),
                           lipHeight: 3.0,
@@ -835,7 +835,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                             onTap: () => Navigator.of(ctx).pop(false),
                             width: 36,
                             height: 36,
-                            radius: 12,
+                            radius: 999,
                             color: boxSurface,
                             borderColor: isDark
                                 ? const Color(0xFF3E3636)
@@ -872,7 +872,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                 setModalState,
                               ),
                               height: 46,
-                              radius: 16,
+                              radius: 999,
                               color: boxSurface,
                               borderColor: const Color(0xFF10B981),
                               borderWidth: 2.0,
@@ -908,7 +908,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                 setModalState,
                               ),
                               height: 46,
-                              radius: 16,
+                              radius: 999,
                               color: boxSurface,
                               borderColor: const Color(0xFF10B981),
                               borderWidth: 2.0,
@@ -947,7 +947,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                             AspectRatio(
                               aspectRatio: 1.0,
                               child: ClipRRect(
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: BorderRadius.circular(24),
                                 child: _buildBoardItemMedia(
                                   completionMediaDataUrl!,
                                 ),
@@ -962,7 +962,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                 ),
                                 width: 36,
                                 height: 36,
-                                radius: 12,
+                                radius: 999,
                                 color: Colors.white,
                                 lipColor: const Color(0xFFDFD8CE),
                                 lipHeight: 2.5,
@@ -987,7 +987,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                         ),
                         decoration: AmodoroTheme.cardOutlineBox(
                           color: boxSurface,
-                          radius: 18,
+                          radius: 24,
                           borderColor: isDark
                               ? const Color(0xFF3E3636)
                               : const Color(0xFFE9E4DC),
@@ -1030,7 +1030,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                           ),
                           decoration: AmodoroTheme.cardOutlineBox(
                             color: const Color(0xFFFFDAD6),
-                            radius: 14,
+                            radius: 18,
                             borderColor: const Color(0xFFD6574D),
                             borderWidth: 1.5,
                             subtleShadow: false,
@@ -1087,7 +1087,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                 }
                               },
                         height: 50,
-                        radius: 18,
+                        radius: 999,
                         color: const Color(0xFF10B981),
                         lipColor: const Color(0xFF059669),
                         lipHeight: 3.5,
@@ -1159,7 +1159,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
               decoration: AmodoroTheme.cardOutlineBox(
                 color: surface,
-                radius: 28,
+                radius: 30,
                 borderColor: itemColor,
                 borderWidth: 2.5,
               ),
@@ -1187,7 +1187,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                         onTap: () => Navigator.of(sheetCtx).pop(),
                         width: 34,
                         height: 34,
-                        radius: 10,
+                        radius: 999,
                         color: isDark ? const Color(0xFF2D2727) : Colors.white,
                         borderColor: isDark
                             ? const Color(0xFF3E3636)
@@ -1215,7 +1215,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                   AmodoroPressableButton(
                     onTap: () => Navigator.of(sheetCtx).pop('complete'),
                     height: 48,
-                    radius: 16,
+                    radius: 999,
                     color: const Color(0xFF10B981),
                     lipColor: const Color(0xFF059669),
                     lipHeight: 3.5,
@@ -1244,7 +1244,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                   AmodoroPressableButton(
                     onTap: () => Navigator.of(sheetCtx).pop('edit'),
                     height: 46,
-                    radius: 16,
+                    radius: 999,
                     color: isDark ? const Color(0xFF2D2727) : Colors.white,
                     borderColor: itemColor,
                     borderWidth: 2.0,
@@ -1276,7 +1276,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                     AmodoroPressableButton(
                       onTap: () => Navigator.of(sheetCtx).pop('copy_pendientes'),
                       height: 46,
-                      radius: 16,
+                      radius: 999,
                       color: isDark ? const Color(0xFF2D2727) : Colors.white,
                       borderColor: const Color(0xFFF27166),
                       borderWidth: 2.0,
@@ -1308,7 +1308,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                   AmodoroPressableButton(
                     onTap: () => Navigator.of(sheetCtx).pop('delete'),
                     height: 46,
-                    radius: 16,
+                    radius: 999,
                     color: const Color(0xFFFFDAD6),
                     lipColor: const Color(0xFFE59890),
                     lipHeight: 3.0,
@@ -1360,7 +1360,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
     }
   }
 
-  /// Submenú para añadir o editar un elemento (con dueDate, altText e imagen 1440px)
+  /// Submenú para añadir o editar un elemento (con dueDate, selectores circulares e imagen 1440px)
   Future<void> _showItemSubmenu({
     required BoardModel board,
     BoardCardItem? existing,
@@ -1369,7 +1369,6 @@ class _BoardsScreenState extends State<BoardsScreen> {
     final notesCtrl = TextEditingController(text: existing?.notes ?? '');
     final emojiCtrl = TextEditingController(text: existing?.emoji ?? '');
     final linkCtrl = TextEditingController(text: existing?.url ?? '');
-    final altTextCtrl = TextEditingController(text: existing?.altText ?? '');
 
     final categoryOptions = <String>{
       for (final b in widget.sync.boards) b.title.toUpperCase(),
@@ -1412,8 +1411,6 @@ class _BoardsScreenState extends State<BoardsScreen> {
         return StatefulBuilder(
           builder: (ctx, setModalState) {
             final boardButtonColor = _resolveBoardVibrantColor(board);
-            final hasImage = imageDataUrl != null ||
-                (existing?.mediaUrl != null && existing!.mediaUrl!.isNotEmpty);
 
             return Padding(
               padding: EdgeInsets.fromLTRB(
@@ -1455,7 +1452,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                             onTap: () => Navigator.of(ctx).pop(false),
                             width: 36,
                             height: 36,
-                            radius: 12,
+                            radius: 999,
                             color: boxSurface,
                             borderColor: isDark
                                 ? const Color(0xFF3E3636)
@@ -1478,10 +1475,10 @@ class _BoardsScreenState extends State<BoardsScreen> {
                             child: Container(
                               height: 48,
                               padding:
-                                  const EdgeInsets.symmetric(horizontal: 14),
+                                  const EdgeInsets.symmetric(horizontal: 16),
                               decoration: AmodoroTheme.cardOutlineBox(
                                 color: boxSurface,
-                                radius: 16,
+                                radius: 999,
                                 borderColor: isDark
                                     ? const Color(0xFF3E3636)
                                     : const Color(0xFFE9E4DC),
@@ -1492,6 +1489,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                 child: DropdownButton<String>(
                                   value: selectedCategory,
                                   isExpanded: true,
+                                  borderRadius: BorderRadius.circular(24),
                                   icon: AmodoroTheme.sysIcon(
                                     Symbols.expand_more,
                                     size: 18,
@@ -1528,10 +1526,10 @@ class _BoardsScreenState extends State<BoardsScreen> {
                             child: Container(
                               height: 48,
                               padding:
-                                  const EdgeInsets.symmetric(horizontal: 14),
+                                  const EdgeInsets.symmetric(horizontal: 16),
                               decoration: AmodoroTheme.cardOutlineBox(
                                 color: boxSurface,
-                                radius: 16,
+                                radius: 999,
                                 borderColor: isDark
                                     ? const Color(0xFF3E3636)
                                     : const Color(0xFFE9E4DC),
@@ -1564,10 +1562,10 @@ class _BoardsScreenState extends State<BoardsScreen> {
                       ),
                       const SizedBox(height: 12),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                         decoration: AmodoroTheme.cardOutlineBox(
                           color: boxSurface,
-                          radius: 16,
+                          radius: 999,
                           borderColor: isDark
                               ? const Color(0xFF3E3636)
                               : const Color(0xFFE9E4DC),
@@ -1595,10 +1593,10 @@ class _BoardsScreenState extends State<BoardsScreen> {
                       ),
                       const SizedBox(height: 12),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                         decoration: AmodoroTheme.cardOutlineBox(
                           color: boxSurface,
-                          radius: 16,
+                          radius: 999,
                           borderColor: isDark
                               ? const Color(0xFF3E3636)
                               : const Color(0xFFE9E4DC),
@@ -1631,10 +1629,10 @@ class _BoardsScreenState extends State<BoardsScreen> {
                           Expanded(
                             child: Container(
                               padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
+                                  const EdgeInsets.symmetric(horizontal: 16),
                               decoration: AmodoroTheme.cardOutlineBox(
                                 color: boxSurface,
-                                radius: 16,
+                                radius: 999,
                                 borderColor: isDark
                                     ? const Color(0xFF3E3636)
                                     : const Color(0xFFE9E4DC),
@@ -1686,7 +1684,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                               height: 48,
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 14),
-                              radius: 16,
+                              radius: 999,
                               color: imageDataUrl != null
                                   ? const Color(0xFF10B981)
                                   : boxSurface,
@@ -1727,41 +1725,6 @@ class _BoardsScreenState extends State<BoardsScreen> {
                         ],
                       ),
 
-                      // Optional altText field when an image is selected/present (Requirement E)
-                      if (hasImage) ...[
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          decoration: AmodoroTheme.cardOutlineBox(
-                            color: boxSurface,
-                            radius: 16,
-                            borderColor: isDark
-                                ? const Color(0xFF3E3636)
-                                : const Color(0xFFE9E4DC),
-                            borderWidth: 1.5,
-                            subtleShadow: false,
-                          ),
-                          child: TextField(
-                            controller: altTextCtrl,
-                            style: AmodoroTheme.googleSans(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: ink,
-                            ),
-                            decoration: InputDecoration(
-                              border: InputBorder.none,
-                              labelText:
-                                  'DESCRIPCIÓN DE IMAGEN (ALT TEXT OPCIONAL)',
-                              labelStyle: AmodoroTheme.googleSans(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                color: muted,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-
                       const SizedBox(height: 12),
 
                       // Optional FECHA / RECORDATORIO button (Requirement F8 / Section E)
@@ -1788,7 +1751,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                               height: 44,
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 14),
-                              radius: 16,
+                              radius: 999,
                               color: boxSurface,
                               borderColor: dueDate != null && dueDate!.isNotEmpty
                                   ? boardButtonColor
@@ -1833,9 +1796,9 @@ class _BoardsScreenState extends State<BoardsScreen> {
                             const SizedBox(width: 8),
                             AmodoroPressableButton(
                               onTap: () => setModalState(() => dueDate = ''),
-                              width: 42,
+                              width: 44,
                               height: 44,
-                              radius: 14,
+                              radius: 999,
                               color: boxSurface,
                               borderColor: isDark
                                   ? const Color(0xFF3E3636)
@@ -1873,7 +1836,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                             onTap: () => setModalState(() => bgColor = p.hex),
                             width: 34,
                             height: 34,
-                            radius: 99,
+                            radius: 999,
                             color: p.color,
                             borderColor: sel ? ink : null,
                             borderWidth: sel ? 2.0 : 0,
@@ -1914,7 +1877,6 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                     mediaDataUrl: imageDataUrl,
                                     linkUrl: linkCtrl.text.trim(),
                                     dueDate: dueDate,
-                                    altText: altTextCtrl.text.trim(),
                                   );
                                 } else {
                                   await widget.api.updateBoardItem(
@@ -1926,13 +1888,12 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                     bgColor: bgColor,
                                     linkUrl: linkCtrl.text.trim(),
                                     dueDate: dueDate,
-                                    altText: altTextCtrl.text.trim(),
                                   );
                                 }
                                 if (ctx.mounted) Navigator.pop(ctx, true);
                               },
                         height: 48,
-                        radius: 18,
+                        radius: 999,
                         color: boardButtonColor,
                         lipColor: AmodoroTheme.darkenForPerspective(
                           boardButtonColor,
@@ -1962,7 +1923,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                             _showCompleteActivitySheet(existing);
                           },
                           height: 46,
-                          radius: 18,
+                          radius: 999,
                           color: const Color(0xFF10B981),
                           lipColor: const Color(0xFF059669),
                           lipHeight: 3.2,
@@ -1995,7 +1956,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                               if (ctx.mounted) Navigator.pop(ctx, true);
                             },
                             height: 44,
-                            radius: 18,
+                            radius: 999,
                             color: boxSurface,
                             borderColor: const Color(0xFFF27166),
                             borderWidth: 2.0,
@@ -2030,7 +1991,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                             if (ctx.mounted) Navigator.pop(ctx, true);
                           },
                           height: 44,
-                          radius: 18,
+                          radius: 999,
                           color: const Color(0xFFFFDAD6),
                           lipColor: const Color(0xFFE59890),
                           lipHeight: 2.8,
@@ -2132,13 +2093,14 @@ class _BoardsScreenState extends State<BoardsScreen> {
                 final displayTitle = board.title.trim().isEmpty
                     ? 'PENDIENTES'
                     : board.title.trim();
+                final int itemCount = board.items.length;
 
                 return Padding(
                   padding: const EdgeInsets.only(right: 10),
                   child: AmodoroPressableButton(
                     onTap: () => setState(() => _selectedBoardId = board.id),
                     onLongPress: () => _showBoardSubmenu(existing: board),
-                    radius: 16,
+                    radius: 999,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 9,
@@ -2167,13 +2129,22 @@ class _BoardsScreenState extends State<BoardsScreen> {
                             fontSize: 11.5,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0.7,
-                            color: isSelected
-                                ? Colors.white
-                                : (isDark
-                                    ? AmodoroTheme.darkInk
-                                    : AmodoroTheme.lightInk),
+                            color: isSelected ? Colors.white : ink,
                           ),
                         ),
+                        if (itemCount > 0) ...[
+                          const SizedBox(width: 5),
+                          Text(
+                            '$itemCount',
+                            style: AmodoroTheme.googleSans(
+                              fontSize: 10.0,
+                              fontWeight: FontWeight.w700,
+                              color: isSelected
+                                  ? Colors.white.withValues(alpha: 0.72)
+                                  : muted,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -2185,7 +2156,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                 padding: const EdgeInsets.only(right: 8),
                 child: AmodoroPressableButton(
                   onTap: () => _showBoardSubmenu(),
-                  radius: 16,
+                  radius: 999,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 13,
                     vertical: 9,
@@ -2228,7 +2199,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                 onTap: _showReorderBoardsSheet,
                 width: 42,
                 height: 42,
-                radius: 16,
+                radius: 999,
                 color: isDark ? AmodoroTheme.darkContainer : Colors.white,
                 borderColor: isDark
                     ? const Color(0xFF383232)
@@ -2260,7 +2231,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                   color: const Color(0xFFF2827A),
                   lipColor: const Color(0xFFD6574D),
                   lipHeight: 3.5,
-                  radius: 16,
+                  radius: 999,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
                     vertical: 10,
@@ -2302,7 +2273,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                   borderWidth: 2.0,
                   lipColor: const Color(0xFF10B981),
                   lipHeight: 3.0,
-                  radius: 16,
+                  radius: 999,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 10,
@@ -2318,7 +2289,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                       const SizedBox(width: 6),
                       Flexible(
                         child: Text(
-                          'HISTORIAL (${widget.sync.completedHistory.length})',
+                          'HISTORIAL',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AmodoroTheme.googleSans(
@@ -2329,6 +2300,17 @@ class _BoardsScreenState extends State<BoardsScreen> {
                           ),
                         ),
                       ),
+                      if (widget.sync.completedHistory.isNotEmpty) ...[
+                        const SizedBox(width: 5),
+                        Text(
+                          '${widget.sync.completedHistory.length}',
+                          style: AmodoroTheme.googleSans(
+                            fontSize: 10.0,
+                            fontWeight: FontWeight.w700,
+                            color: muted,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -2348,7 +2330,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                 },
                 width: 44,
                 height: 42,
-                radius: 14,
+                radius: 999,
                 color: _showSearch
                     ? addButtonColor
                     : (isDark ? AmodoroTheme.darkContainer : Colors.white),
@@ -2379,10 +2361,10 @@ class _BoardsScreenState extends State<BoardsScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
               decoration: AmodoroTheme.cardOutlineBox(
                 color: isDark ? AmodoroTheme.darkContainer : Colors.white,
-                radius: 18,
+                radius: 999,
                 borderColor: addButtonColor,
                 borderWidth: 1.8,
                 subtleShadow: false,
@@ -2452,9 +2434,9 @@ class _BoardsScreenState extends State<BoardsScreen> {
                         decoration: AmodoroTheme.cardOutlineBox(
                           color:
                               isDark ? AmodoroTheme.darkContainer : Colors.white,
-                          radius: 26,
+                          radius: 30,
                           borderColor: addButtonColor.withValues(alpha: 0.55),
-                          borderWidth: 2.0,
+                          borderWidth: 2.5,
                         ),
                         child: Column(
                           children: [
@@ -2562,9 +2544,21 @@ class _BoardsScreenState extends State<BoardsScreen> {
     final ink = isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk;
     final muted = isDark ? AmodoroTheme.darkMuted : AmodoroTheme.lightMuted;
     final cardSurface = isDark ? AmodoroTheme.darkContainer : Colors.white;
-    final myHeartReaction = item.reactions.any(
-      (r) => r.userId == widget.sync.me.id,
-    );
+    final emojis = widget.sync.reactionEmojis.isNotEmpty
+        ? widget.sync.reactionEmojis
+        : _defaultEmojis;
+    final myReaction = item.reactions
+        .where((r) =>
+            r.userId == widget.sync.me.id &&
+            r.emoji != null &&
+            r.emoji!.isNotEmpty)
+        .firstOrNull;
+    final partnerReaction = item.reactions
+        .where((r) =>
+            r.userId != widget.sync.me.id &&
+            r.emoji != null &&
+            r.emoji!.isNotEmpty)
+        .firstOrNull;
 
     return GestureDetector(
       onTap: () => _showItemDetailModal(board: board, item: item),
@@ -2575,9 +2569,9 @@ class _BoardsScreenState extends State<BoardsScreen> {
         // STRICT RULE: Border-only card, NO 3D bottom lip!
         decoration: AmodoroTheme.cardOutlineBox(
           color: cardSurface,
-          radius: 26,
+          radius: 30,
           borderColor: itemVibrantColor,
-          borderWidth: 2.2,
+          borderWidth: 2.5,
           subtleShadow: true,
         ),
         child: Column(
@@ -2619,7 +2613,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                       _showItemQuickActionsMenu(board: board, item: item),
                   width: 34,
                   height: 34,
-                  radius: 10,
+                  radius: 999,
                   color: isDark
                       ? const Color(0xFF2D2727)
                       : const Color(0xFFF6EFE6),
@@ -2644,12 +2638,12 @@ class _BoardsScreenState extends State<BoardsScreen> {
             if (item.dueDate != null && item.dueDate!.trim().isNotEmpty) ...[
               const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                 decoration: BoxDecoration(
                   color: isDark
                       ? const Color(0xFF2D2727)
                       : const Color(0xFFFAF6F0),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(999),
                   border: Border.all(
                     color: itemVibrantColor.withValues(alpha: 0.45),
                     width: 1.2,
@@ -2685,7 +2679,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                       child: AspectRatio(
                         aspectRatio: 1.0,
                         child: ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(24),
                           child: _buildBoardItemMedia(resolvedUrl),
                         ),
                       ),
@@ -2736,92 +2730,158 @@ class _BoardsScreenState extends State<BoardsScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
 
-            // Footer: FlatAvatarBadge + author name + reaction count / quick heart reaction button
+            // Author row
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      FlatAvatarBadge(
-                        avatarId: item.authorAvatarId,
-                        size: 22,
-                        borderWidth: 1.5,
-                      ),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          item.authorLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AmodoroTheme.googleSans(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: muted,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                FlatAvatarBadge(
+                  avatarId: item.authorAvatarId,
+                  size: 20,
+                  borderWidth: 1.5,
                 ),
                 const SizedBox(width: 6),
-                AmodoroPressableButton(
-                  onTap: () async {
-                    try {
-                      await widget.api.reactToBoardItem(
-                        itemId: item.id,
-                        emoji: '❤️',
-                      );
-                      await widget.onRefresh();
-                    } catch (_) {}
-                  },
-                  height: 28,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  radius: 999,
-                  color: myHeartReaction
-                      ? itemVibrantColor
-                      : (isDark
-                          ? const Color(0xFF2D2727)
-                          : const Color(0xFFF6EFE6)),
-                  borderColor: myHeartReaction
-                      ? null
-                      : itemVibrantColor.withValues(alpha: 0.45),
-                  borderWidth: myHeartReaction ? 0 : 1.2,
-                  lipColor: myHeartReaction
-                      ? AmodoroTheme.darkenForPerspective(
-                          itemVibrantColor,
-                          0.18,
-                        )
-                      : (isDark
-                          ? const Color(0xFF201C1C)
-                          : const Color(0xFFD6CEC2)),
-                  lipHeight: 2.0,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        item.reactions.isNotEmpty
-                            ? (item.reactions.last.emoji ?? '❤️')
-                            : '❤️',
-                        style: const TextStyle(fontSize: 11.5),
+                Flexible(
+                  child: Text(
+                    item.authorLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AmodoroTheme.googleSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: muted,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Emoji Reaction Dock (Before reacting -> dock of emojis; After reacting -> only chosen emoji) + partner's reaction
+            Row(
+              children: [
+                if (myReaction == null)
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 4,
                       ),
-                      if (item.reactions.isNotEmpty) ...[
+                      decoration: AmodoroTheme.cardOutlineBox(
+                        color: isDark
+                            ? const Color(0xFF2D2727)
+                            : const Color(0xFFFAF6F0),
+                        radius: 999,
+                        borderColor: itemVibrantColor.withValues(alpha: 0.45),
+                        borderWidth: 1.4,
+                        subtleShadow: false,
+                      ),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: emojis.map((emoji) {
+                            return Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 2),
+                              child: AmodoroPressableButton(
+                                onTap: () async {
+                                  try {
+                                    await widget.api.reactToBoardItem(
+                                      itemId: item.id,
+                                      emoji: emoji,
+                                    );
+                                    await widget.onRefresh();
+                                  } catch (_) {}
+                                },
+                                width: 32,
+                                height: 32,
+                                radius: 999,
+                                color: isDark
+                                    ? AmodoroTheme.darkContainer
+                                    : Colors.white,
+                                borderColor: isDark
+                                    ? const Color(0xFF3E3636)
+                                    : const Color(0xFFE6DFD5),
+                                borderWidth: 1.0,
+                                lipHeight: 1.8,
+                                child: Text(
+                                  emoji,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    height: 1.05,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  AmodoroPressableButton(
+                    onTap: () async {
+                      try {
+                        await widget.api.reactToBoardItem(
+                          itemId: item.id,
+                          emoji: myReaction.emoji,
+                        );
+                        await widget.onRefresh();
+                      } catch (_) {}
+                    },
+                    height: 36,
+                    padding: const EdgeInsets.symmetric(horizontal: 11),
+                    radius: 999,
+                    color: itemVibrantColor.withValues(alpha: 0.16),
+                    borderColor: itemVibrantColor,
+                    borderWidth: 1.8,
+                    lipColor: itemVibrantColor,
+                    lipHeight: 2.4,
+                    child: Text(
+                      myReaction.emoji!,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        height: 1.05,
+                      ),
+                    ),
+                  ),
+                if (partnerReaction != null) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    height: 36,
+                    padding: const EdgeInsets.symmetric(horizontal: 9),
+                    decoration: AmodoroTheme.cardOutlineBox(
+                      color: isDark
+                          ? const Color(0xFF2D2727)
+                          : const Color(0xFFF6EFE6),
+                      radius: 999,
+                      borderColor: isDark
+                          ? const Color(0xFF3E3636)
+                          : const Color(0xFFE6DFD5),
+                      borderWidth: 1.4,
+                      subtleShadow: false,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FlatAvatarBadge(
+                          avatarId: partnerReaction.authorAvatarId,
+                          size: 18,
+                          borderWidth: 1.2,
+                        ),
                         const SizedBox(width: 4),
                         Text(
-                          '${item.reactions.length}',
-                          style: AmodoroTheme.googleSans(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w800,
-                            color: myHeartReaction ? Colors.white : ink,
+                          partnerReaction.emoji!,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            height: 1.05,
                           ),
                         ),
                       ],
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ],
@@ -2853,6 +2913,19 @@ class _BoardsScreenState extends State<BoardsScreen> {
 
         return StatefulBuilder(
           builder: (ctx, setModalState) {
+            final myReaction = item.reactions
+                .where((r) =>
+                    r.userId == widget.sync.me.id &&
+                    r.emoji != null &&
+                    r.emoji!.isNotEmpty)
+                .firstOrNull;
+            final partnerReaction = item.reactions
+                .where((r) =>
+                    r.userId != widget.sync.me.id &&
+                    r.emoji != null &&
+                    r.emoji!.isNotEmpty)
+                .firstOrNull;
+
             return Dialog(
               backgroundColor: Colors.transparent,
               elevation: 0,
@@ -2868,7 +2941,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                 // Border-only modal container
                 decoration: AmodoroTheme.cardOutlineBox(
                   color: cardSurface,
-                  radius: 28,
+                  radius: 30,
                   borderColor: itemVibrantColor,
                   borderWidth: 2.5,
                 ),
@@ -2897,7 +2970,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                           onTap: () => Navigator.of(ctx).pop('edit'),
                           width: 36,
                           height: 36,
-                          radius: 12,
+                          radius: 999,
                           color: pillFill,
                           borderColor: isDark
                               ? const Color(0xFF3E3636)
@@ -2915,7 +2988,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                           onTap: () => Navigator.of(ctx).pop(),
                           width: 36,
                           height: 36,
-                          radius: 12,
+                          radius: 999,
                           color: pillFill,
                           borderColor: isDark
                               ? const Color(0xFF3E3636)
@@ -2943,12 +3016,12 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                 item.dueDate!.trim().isNotEmpty) ...[
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
+                                  horizontal: 12,
                                   vertical: 5,
                                 ),
                                 decoration: BoxDecoration(
                                   color: pillFill,
-                                  borderRadius: BorderRadius.circular(10),
+                                  borderRadius: BorderRadius.circular(999),
                                   border: Border.all(
                                     color:
                                         itemVibrantColor.withValues(alpha: 0.5),
@@ -2986,7 +3059,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                         aspectRatio: 1.0,
                                         child: ClipRRect(
                                           borderRadius:
-                                              BorderRadius.circular(20),
+                                              BorderRadius.circular(24),
                                           child: _buildBoardItemMedia(
                                             resolvedUrl,
                                           ),
@@ -3034,63 +3107,177 @@ class _BoardsScreenState extends State<BoardsScreen> {
                             ],
                             const SizedBox(height: 14),
 
-                            // Emoji reaction buttons inside detail modal
+                            // Emoji Reaction Dock inside detail modal (Dock before reacting -> Chosen emoji after reacting + partner reaction)
                             Wrap(
                               spacing: 8,
                               runSpacing: 8,
-                              children: emojis.map((emoji) {
-                                final myReaction = item.reactions.any(
-                                  (r) =>
-                                      r.userId == widget.sync.me.id &&
-                                      r.emoji == emoji,
-                                );
-                                return AmodoroPressableButton(
-                                  onTap: busy
-                                      ? null
-                                      : () async {
-                                          setModalState(() => busy = true);
-                                          try {
-                                            await widget.api.reactToBoardItem(
-                                              itemId: item.id,
-                                              emoji: emoji,
-                                            );
-                                            await widget.onRefresh();
-                                            if (ctx.mounted) {
-                                              Navigator.of(ctx).pop('reacted');
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                if (myReaction == null)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 5,
+                                    ),
+                                    decoration: AmodoroTheme.cardOutlineBox(
+                                      color: pillFill,
+                                      radius: 999,
+                                      borderColor: itemVibrantColor.withValues(
+                                        alpha: 0.5,
+                                      ),
+                                      borderWidth: 1.5,
+                                      subtleShadow: false,
+                                    ),
+                                    child: SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: emojis.map((emoji) {
+                                          return Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 3,
+                                            ),
+                                            child: AmodoroPressableButton(
+                                              onTap: busy
+                                                  ? null
+                                                  : () async {
+                                                      setModalState(
+                                                        () => busy = true,
+                                                      );
+                                                      try {
+                                                        await widget.api
+                                                            .reactToBoardItem(
+                                                          itemId: item.id,
+                                                          emoji: emoji,
+                                                        );
+                                                        await widget
+                                                            .onRefresh();
+                                                        if (ctx.mounted) {
+                                                          Navigator.of(ctx)
+                                                              .pop('reacted');
+                                                        }
+                                                      } catch (_) {
+                                                        if (ctx.mounted) {
+                                                          setModalState(
+                                                            () => busy = false,
+                                                          );
+                                                        }
+                                                      }
+                                                    },
+                                              width: 38,
+                                              height: 38,
+                                              radius: 999,
+                                              color: cardSurface,
+                                              borderColor: isDark
+                                                  ? const Color(0xFF3E3636)
+                                                  : const Color(0xFFE2DDD4),
+                                              borderWidth: 1.2,
+                                              lipHeight: 2.2,
+                                              child: Text(
+                                                emoji,
+                                                style: const TextStyle(
+                                                  fontSize: 21,
+                                                  height: 1.05,
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  AmodoroPressableButton(
+                                    onTap: busy
+                                        ? null
+                                        : () async {
+                                            setModalState(() => busy = true);
+                                            try {
+                                              await widget.api.reactToBoardItem(
+                                                itemId: item.id,
+                                                emoji: myReaction.emoji,
+                                              );
+                                              await widget.onRefresh();
+                                              if (ctx.mounted) {
+                                                Navigator.of(ctx)
+                                                    .pop('reacted');
+                                              }
+                                            } catch (_) {
+                                              if (ctx.mounted) {
+                                                setModalState(
+                                                  () => busy = false,
+                                                );
+                                              }
                                             }
-                                          } catch (_) {
-                                            if (ctx.mounted) {
-                                              setModalState(() => busy = false);
-                                            }
-                                          }
-                                        },
-                                  height: 36,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 11,
+                                          },
+                                    height: 40,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 13,
+                                    ),
+                                    radius: 999,
+                                    color: itemVibrantColor.withValues(
+                                      alpha: 0.16,
+                                    ),
+                                    borderColor: itemVibrantColor,
+                                    borderWidth: 2.0,
+                                    lipColor: itemVibrantColor,
+                                    lipHeight: 2.5,
+                                    child: Text(
+                                      myReaction.emoji!,
+                                      style: const TextStyle(
+                                        fontSize: 22,
+                                        height: 1.05,
+                                      ),
+                                    ),
                                   ),
-                                  radius: 12,
-                                  color: myReaction
-                                      ? itemVibrantColor
-                                      : pillFill,
-                                  borderColor: myReaction
-                                      ? null
-                                      : (isDark
+                                if (partnerReaction != null)
+                                  Container(
+                                    height: 40,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 11,
+                                    ),
+                                    decoration: AmodoroTheme.cardOutlineBox(
+                                      color: pillFill,
+                                      radius: 999,
+                                      borderColor: isDark
                                           ? const Color(0xFF3E3636)
-                                          : const Color(0xFFE2DDD4)),
-                                  borderWidth: myReaction ? 0 : 1.5,
-                                  lipColor: myReaction
-                                      ? AmodoroTheme.darkenForPerspective(
-                                          itemVibrantColor,
-                                          0.18,
-                                        )
-                                      : null,
-                                  lipHeight: 2.5,
-                                  child: Text(
-                                    emoji,
-                                    style: const TextStyle(fontSize: 15),
+                                          : const Color(0xFFE2DDD4),
+                                      borderWidth: 1.5,
+                                      subtleShadow: false,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        FlatAvatarBadge(
+                                          avatarId:
+                                              partnerReaction.authorAvatarId,
+                                          size: 20,
+                                          borderWidth: 1.2,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          partnerReaction.emoji!,
+                                          style: const TextStyle(
+                                            fontSize: 20,
+                                            height: 1.05,
+                                          ),
+                                        ),
+                                        if (partnerReaction
+                                            .authorLabel.isNotEmpty) ...[
+                                          const SizedBox(width: 5),
+                                          Text(
+                                            partnerReaction.authorLabel,
+                                            style: AmodoroTheme.googleSans(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: muted,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
                                   ),
-                                );
-                              }).toList(),
+                              ],
                             ),
                           ],
                         ),
@@ -3128,8 +3315,8 @@ class _BoardsScreenState extends State<BoardsScreen> {
                         AmodoroPressableButton(
                           onTap: () => Navigator.of(ctx).pop('delete'),
                           height: 34,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          radius: 10,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          radius: 999,
                           color: const Color(0xFFFFDAD6),
                           lipColor: const Color(0xFFE59890),
                           lipHeight: 2.2,
@@ -3181,7 +3368,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                                       }
                                     },
                               height: 44,
-                              radius: 14,
+                              radius: 999,
                               color: pillFill,
                               borderColor: const Color(0xFFF27166),
                               borderWidth: 2.0,
@@ -3219,7 +3406,7 @@ class _BoardsScreenState extends State<BoardsScreen> {
                           child: AmodoroPressableButton(
                             onTap: () => Navigator.of(ctx).pop('complete'),
                             height: 44,
-                            radius: 14,
+                            radius: 999,
                             color: const Color(0xFF10B981),
                             lipColor: const Color(0xFF059669),
                             lipHeight: 3.2,

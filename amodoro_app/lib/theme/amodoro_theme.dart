@@ -220,7 +220,7 @@ class AmodoroTheme {
   /// - Usada para botones, píldoras interactivas y selectores con perspectiva física inferior.
   static BoxDecoration floatingPerspectiveBox({
     required Color color,
-    double radius = 22,
+    double radius = 999,
     double thickness = 3.0,
     Color? perspectiveEdgeColor,
     Color? fullBorderColor,
@@ -250,7 +250,7 @@ class AmodoroTheme {
   /// - Usa únicamente borde completo uniforme (`Border.all`) sin labio inferior duro.
   static BoxDecoration cardOutlineBox({
     required Color color,
-    double radius = 28,
+    double radius = 34,
     Color? borderColor,
     double borderWidth = 3.0,
     bool subtleShadow = true,
@@ -281,7 +281,7 @@ class AmodoroTheme {
     if (isSelected) {
       return BoxDecoration(
         color: boardColor,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(999),
         boxShadow: [
           BoxShadow(
             color: darkenForPerspective(boardColor, 0.18),
@@ -293,7 +293,7 @@ class AmodoroTheme {
     }
     return BoxDecoration(
       color: isDark ? darkContainer : Colors.white,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(999),
       border: Border.all(color: boardColor, width: 2.0),
       boxShadow: [
         BoxShadow(
