@@ -1,8 +1,23 @@
-import { asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { boardItems, boards, users } from "@/db/schema";
+import {
+  boardItemReactions,
+  boardItems,
+  boards,
+  users,
+} from "@/db/schema";
+import { getAllUsers, getPartnerUser } from "./auth";
 
 export type BoardRow = typeof boards.$inferSelect;
+
+export type BoardItemReactionRow = {
+  id: number;
+  itemId: number;
+  userId: number;
+  emoji: string | null;
+  presetText: string | null;
+  createdAt: Date;
+};
 
 export type HydratedBoardItem = {
   id: number;
@@ -17,16 +32,47 @@ export type HydratedBoardItem = {
   emoji: string | null;
   bgColor: string;
   mediaId: number | null;
+  sortOrder: number;
+  dueDate: string | null;
   addedBy: number;
   addedByUsername: string;
   addedByDisplayName: string;
   addedByAvatarId: string;
   addedByNickname: string;
   completedAt: Date | null;
+  completedBy: number | null;
+  completionText: string | null;
+  completionMediaId: number | null;
   createdAt: Date;
+  reactions: BoardItemReactionRow[];
 };
 
-export function listBoardsWithItems(): {
+function attachItemReactions(
+  rows: Omit<HydratedBoardItem, "reactions">[],
+): HydratedBoardItem[] {
+  if (rows.length === 0) return [];
+  const itemIds = rows.map((r) => r.id);
+  const allReactions = db
+    .select()
+    .from(boardItemReactions)
+    .where(inArray(boardItemReactions.itemId, itemIds))
+    .orderBy(desc(boardItemReactions.createdAt))
+    .all();
+
+  const byItem = new Map<number, BoardItemReactionRow[]>();
+  for (const rx of allReactions) {
+    const list = byItem.get(rx.itemId) ?? [];
+    list.push(rx);
+    byItem.set(rx.itemId, list);
+  }
+
+  return rows.map((r) => ({
+    ...r,
+    reactions: byItem.get(r.id) ?? [],
+  }));
+}
+
+export function listBoardsWithItems(viewerId?: number): {
   boards: BoardRow[];
   itemsByBoardId: Record<number, HydratedBoardItem[]>;
   actividadesBoardId: number;
@@ -34,10 +80,16 @@ export function listBoardsWithItems(): {
   const allBoards = db
     .select()
     .from(boards)
-    .orderBy(desc(boards.isSystem), asc(boards.id))
+    .orderBy(asc(boards.sortOrder), desc(boards.isSystem), asc(boards.id))
     .all();
 
-  const rows = db
+  let allowedUserIds: number[] | null = null;
+  if (viewerId !== undefined) {
+    const partner = getPartnerUser(viewerId);
+    allowedUserIds = partner ? [viewerId, partner.id] : [viewerId];
+  }
+
+  const rawRows = db
     .select({
       id: boardItems.id,
       boardId: boardItems.boardId,
@@ -51,19 +103,33 @@ export function listBoardsWithItems(): {
       emoji: boardItems.emoji,
       bgColor: boardItems.bgColor,
       mediaId: boardItems.mediaId,
+      sortOrder: boardItems.sortOrder,
+      dueDate: boardItems.dueDate,
       addedBy: boardItems.addedBy,
       addedByUsername: users.username,
       addedByDisplayName: users.displayName,
       addedByAvatarId: users.avatarId,
       addedByNickname: users.nicknameByPartner,
       completedAt: boardItems.completedAt,
+      completedBy: boardItems.completedBy,
+      completionText: boardItems.completionText,
+      completionMediaId: boardItems.completionMediaId,
       createdAt: boardItems.createdAt,
     })
     .from(boardItems)
     .innerJoin(users, eq(boardItems.addedBy, users.id))
-    .where(isNull(boardItems.completedAt))
-    .orderBy(desc(boardItems.id))
+    .where(
+      allowedUserIds
+        ? and(
+            isNull(boardItems.completedAt),
+            inArray(boardItems.addedBy, allowedUserIds),
+          )
+        : isNull(boardItems.completedAt),
+    )
+    .orderBy(asc(boardItems.sortOrder), desc(boardItems.id))
     .all();
+
+  const rows = attachItemReactions(rawRows);
 
   const itemsByBoardId: Record<number, HydratedBoardItem[]> = {};
   for (const b of allBoards) {
@@ -86,6 +152,56 @@ export function listBoardsWithItems(): {
   };
 }
 
+export function listCompletedBoardItems(viewerId?: number): HydratedBoardItem[] {
+  let allowedUserIds: number[] | null = null;
+  if (viewerId !== undefined) {
+    const partner = getPartnerUser(viewerId);
+    allowedUserIds = partner ? [viewerId, partner.id] : [viewerId];
+  }
+
+  const rawRows = db
+    .select({
+      id: boardItems.id,
+      boardId: boardItems.boardId,
+      categoryTag: boardItems.categoryTag,
+      title: boardItems.title,
+      notes: boardItems.notes,
+      url: boardItems.url,
+      linkTitle: boardItems.linkTitle,
+      linkThumbnail: boardItems.linkThumbnail,
+      linkPlatform: boardItems.linkPlatform,
+      emoji: boardItems.emoji,
+      bgColor: boardItems.bgColor,
+      mediaId: boardItems.mediaId,
+      sortOrder: boardItems.sortOrder,
+      dueDate: boardItems.dueDate,
+      addedBy: boardItems.addedBy,
+      addedByUsername: users.username,
+      addedByDisplayName: users.displayName,
+      addedByAvatarId: users.avatarId,
+      addedByNickname: users.nicknameByPartner,
+      completedAt: boardItems.completedAt,
+      completedBy: boardItems.completedBy,
+      completionText: boardItems.completionText,
+      completionMediaId: boardItems.completionMediaId,
+      createdAt: boardItems.createdAt,
+    })
+    .from(boardItems)
+    .innerJoin(users, eq(boardItems.addedBy, users.id))
+    .where(
+      allowedUserIds
+        ? and(
+            isNotNull(boardItems.completedAt),
+            inArray(boardItems.addedBy, allowedUserIds),
+          )
+        : isNotNull(boardItems.completedAt),
+    )
+    .orderBy(desc(boardItems.completedAt), desc(boardItems.id))
+    .all();
+
+  return attachItemReactions(rawRows);
+}
+
 export function createCustomBoard(input: {
   title: string;
   icon?: string;
@@ -103,13 +219,20 @@ export function createCustomBoard(input: {
     .replace(/(^-|-$)/g, "");
   const slug = `${baseSlug || "tablero"}-${Date.now().toString(36)}`;
 
+  const existingBoards = db.select().from(boards).all();
+  const maxOrder = existingBoards.reduce(
+    (max, b) => Math.max(max, b.sortOrder ?? 0),
+    0,
+  );
+
   return db
     .insert(boards)
     .values({
       slug,
       title: cleanTitle,
       icon: input.icon?.trim() || "bookmark",
-      bgColor: input.bgColor?.trim() || "#F4EFE8",
+      bgColor: input.bgColor?.trim() || "#F27166",
+      sortOrder: maxOrder + 1,
       isSystem: false,
       createdBy: input.userId,
       createdAt: new Date(),
@@ -151,6 +274,30 @@ export function deleteBoard(boardId: number) {
   db.delete(boards).where(eq(boards.id, boardId)).run();
 }
 
+export function reorderBoards(boardIds: (number | string)[]) {
+  boardIds.forEach((rawId, idx) => {
+    const id = Number(rawId);
+    if (Number.isInteger(id) && id > 0) {
+      db.update(boards)
+        .set({ sortOrder: idx })
+        .where(eq(boards.id, id))
+        .run();
+    }
+  });
+}
+
+export function reorderBoardItems(itemIds: (number | string)[]) {
+  itemIds.forEach((rawId, idx) => {
+    const id = Number(rawId);
+    if (Number.isInteger(id) && id > 0) {
+      db.update(boardItems)
+        .set({ sortOrder: idx })
+        .where(eq(boardItems.id, id))
+        .run();
+    }
+  });
+}
+
 export function addBoardItem(input: {
   boardId: number;
   categoryTag?: string;
@@ -163,6 +310,7 @@ export function addBoardItem(input: {
   emoji?: string;
   bgColor?: string;
   mediaId?: number | null;
+  dueDate?: string | null;
   userId: number;
 }) {
   const cleanTitle = input.title.trim();
@@ -192,8 +340,9 @@ export function addBoardItem(input: {
       linkThumbnail: input.linkThumbnail?.trim() || null,
       linkPlatform: input.linkPlatform?.trim() || null,
       emoji: input.emoji?.trim() || null,
-      bgColor: input.bgColor?.trim() || "#FFDAD6",
+      bgColor: input.bgColor?.trim() || parentBoard?.bgColor || "#FFDAD6",
       mediaId: input.mediaId ?? null,
+      dueDate: input.dueDate?.trim() || null,
       addedBy: input.userId,
       createdAt: new Date(),
     })
@@ -209,6 +358,7 @@ export function updateBoardItem(input: {
   bgColor?: string;
   emoji?: string;
   url?: string;
+  dueDate?: string | null;
 }) {
   const updates: Partial<typeof boardItems.$inferInsert> = {};
   if (typeof input.title === "string" && input.title.trim()) {
@@ -228,6 +378,9 @@ export function updateBoardItem(input: {
   }
   if (typeof input.url === "string") {
     updates.url = input.url.trim() || null;
+  }
+  if (input.dueDate !== undefined) {
+    updates.dueDate = input.dueDate?.trim() || null;
   }
   if (Object.keys(updates).length > 0) {
     db.update(boardItems)
@@ -277,6 +430,7 @@ export function copyItemToActividades(itemId: number, userId: number) {
       emoji: source.emoji,
       bgColor: source.bgColor,
       mediaId: source.mediaId,
+      dueDate: source.dueDate,
       addedBy: userId,
       createdAt: new Date(),
     })
@@ -284,6 +438,117 @@ export function copyItemToActividades(itemId: number, userId: number) {
     .get();
 }
 
-export function deleteOrCompleteBoardItem(itemId: number) {
+export function completeBoardItem(input: {
+  itemId: number;
+  userId: number;
+  completionText?: string | null;
+  completionMediaId?: number | null;
+}) {
+  const existing = db
+    .select()
+    .from(boardItems)
+    .where(eq(boardItems.id, input.itemId))
+    .get();
+
+  if (!existing) {
+    throw new Error("Elemento no encontrado.");
+  }
+
+  const cleanText = input.completionText?.trim() || "";
+  const mediaId = input.completionMediaId ?? null;
+
+  if (!cleanText && !mediaId) {
+    throw new Error(
+      "Añade una foto, imagen o mensaje para guardar este recuerdo en el historial.",
+    );
+  }
+
+  return db
+    .update(boardItems)
+    .set({
+      completedAt: new Date(),
+      completedBy: input.userId,
+      completionText: cleanText || null,
+      completionMediaId: mediaId,
+    })
+    .where(eq(boardItems.id, input.itemId))
+    .returning()
+    .get();
+}
+
+export function deleteBoardItem(itemId: number) {
   db.delete(boardItems).where(eq(boardItems.id, itemId)).run();
+}
+
+export function deleteOrCompleteBoardItem(itemId: number) {
+  deleteBoardItem(itemId);
+}
+
+export function reactToBoardItem(input: {
+  itemId: number;
+  userId: number;
+  emoji?: string | null;
+  presetText?: string | null;
+}) {
+  const item = db
+    .select()
+    .from(boardItems)
+    .where(eq(boardItems.id, input.itemId))
+    .get();
+  if (!item) {
+    throw new Error("Elemento no encontrado.");
+  }
+
+  const emoji = input.emoji?.trim() || null;
+  const presetText = input.presetText?.trim() || null;
+
+  const existing = db
+    .select()
+    .from(boardItemReactions)
+    .where(eq(boardItemReactions.itemId, input.itemId))
+    .all()
+    .find((r) => r.userId === input.userId);
+
+  if (
+    (!emoji && !presetText) ||
+    (existing &&
+      emoji &&
+      !presetText &&
+      existing.emoji === emoji &&
+      !existing.presetText) ||
+    (existing &&
+      presetText &&
+      !emoji &&
+      existing.presetText === presetText &&
+      !existing.emoji)
+  ) {
+    if (existing) {
+      db.delete(boardItemReactions)
+        .where(eq(boardItemReactions.id, existing.id))
+        .run();
+    }
+    return { removed: true };
+  }
+
+  if (existing) {
+    db.update(boardItemReactions)
+      .set({
+        emoji: emoji ?? existing.emoji,
+        presetText: presetText ?? existing.presetText,
+        createdAt: new Date(),
+      })
+      .where(eq(boardItemReactions.id, existing.id))
+      .run();
+  } else {
+    db.insert(boardItemReactions)
+      .values({
+        itemId: input.itemId,
+        userId: input.userId,
+        emoji,
+        presetText,
+        createdAt: new Date(),
+      })
+      .run();
+  }
+  return { removed: false };
 }

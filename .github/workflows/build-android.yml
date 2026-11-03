@@ -27,7 +27,7 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Generate platform directories, configure manifest ("amodoro") & generate Coral "a" launcher icon
+      - name: Generate platform directories, configure Firebase, Share Intent, Manifest & Coral "a" icon
         working-directory: amodoro_app
         run: |
           flutter create . --project-name amodoro_app --org com.amodoro --platforms android,ios,web
@@ -39,17 +39,81 @@ jobs:
           from pathlib import Path
           from PIL import Image, ImageDraw, ImageFont
 
-          # 1. Update AndroidManifest.xml with android:label="amodoro", permissions, and queries
+          # 0. Copy google-services.json into android/app/google-services.json
+          gs_src = Path("android/google-services.json")
+          gs_dst = Path("android/app/google-services.json")
+          if gs_src.exists():
+              shutil.copy(gs_src, gs_dst)
+              print("Copied android/google-services.json -> android/app/google-services.json")
+          else:
+              raise FileNotFoundError("Missing android/google-services.json")
+
+          # 1. Configure Gradle for Google Services (4.5.0) and Firebase BoM (35.1.0) + minSdk 23
+          settings_kts = Path("android/settings.gradle.kts")
+          settings_groovy = Path("android/settings.gradle")
+          if settings_kts.exists():
+              s_txt = settings_kts.read_text()
+              if "com.google.gms.google-services" not in s_txt:
+                  s_txt = s_txt.replace(
+                      'id("com.android.application")',
+                      'id("com.google.gms.google-services") version "4.5.0" apply false\n    id("com.android.application")',
+                      1,
+                  )
+                  settings_kts.write_text(s_txt)
+                  print("Updated android/settings.gradle.kts with google-services 4.5.0")
+          elif settings_groovy.exists():
+              s_txt = settings_groovy.read_text()
+              if "com.google.gms.google-services" not in s_txt:
+                  s_txt = s_txt.replace(
+                      'id "com.android.application"',
+                      'id "com.google.gms.google-services" version "4.5.0" apply false\n    id "com.android.application"',
+                      1,
+                  )
+                  settings_groovy.write_text(s_txt)
+                  print("Updated android/settings.gradle with google-services 4.5.0")
+
+          app_kts = Path("android/app/build.gradle.kts")
+          app_groovy = Path("android/app/build.gradle")
+          if app_kts.exists():
+              a_txt = app_kts.read_text()
+              if "com.google.gms.google-services" not in a_txt:
+                  a_txt = a_txt.replace(
+                      'id("com.android.application")',
+                      'id("com.android.application")\n    id("com.google.gms.google-services")',
+                      1,
+                  )
+              a_txt = re.sub(r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 23', a_txt)
+              if "firebase-bom" not in a_txt:
+                  a_txt += '\ndependencies {\n    implementation(platform("com.google.firebase:firebase-bom:35.1.0"))\n}\n'
+              app_kts.write_text(a_txt)
+              print("Updated android/app/build.gradle.kts")
+          elif app_groovy.exists():
+              a_txt = app_groovy.read_text()
+              if "com.google.gms.google-services" not in a_txt:
+                  a_txt = a_txt.replace(
+                      'id "com.android.application"',
+                      'id "com.android.application"\n    id "com.google.gms.google-services"',
+                      1,
+                  )
+              a_txt = re.sub(r'minSdk\s*=?\s*flutter\.minSdkVersion', 'minSdk = 23', a_txt)
+              a_txt = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 23', a_txt)
+              if "firebase-bom" not in a_txt:
+                  a_txt += "\ndependencies {\n    implementation platform('com.google.firebase:firebase-bom:35.1.0')\n}\n"
+              app_groovy.write_text(a_txt)
+              print("Updated android/app/build.gradle")
+
+          # 2. Update AndroidManifest.xml (HTTPS only, allowBackup=false, permissions, Share Intent)
           manifest_path = Path("android/app/src/main/AndroidManifest.xml")
           txt = manifest_path.read_text()
           if 'xmlns:android' not in txt:
               txt = txt.replace("<manifest", '<manifest\n    xmlns:android="http://schemas.android.com/apk/res/android"', 1)
 
-          # Replace android:label with lowercase "amodoro"
           txt = re.sub(r'android:label="[^"]*"', 'android:label="amodoro"', txt)
+          txt = re.sub(r'\s*android:usesCleartextTraffic="true"', '', txt)
 
           permissions_block = """<uses-permission android:name="android.permission.INTERNET"/>
               <uses-permission android:name="android.permission.CAMERA"/>
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
               <queries>
                   <intent>
                       <action android:name="android.intent.action.VIEW" />
@@ -63,26 +127,93 @@ jobs:
 
           if "android.permission.INTERNET" not in txt:
               txt = txt.replace("<application", f"{permissions_block}\n    <application", 1)
-          if "usesCleartextTraffic" not in txt:
-              txt = txt.replace("<application", '<application\n        android:usesCleartextTraffic="true"', 1)
+          if "android:allowBackup" not in txt:
+              txt = txt.replace("<application", '<application\n        android:allowBackup="false"', 1)
+
+          share_intent_block = """            <intent-filter>
+                          <action android:name="android.intent.action.SEND" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                          <data android:mimeType="text/plain" />
+                      </intent-filter>
+                  </activity>"""
+          if "android.intent.action.SEND" not in txt:
+              txt = txt.replace("</activity>", share_intent_block, 1)
+
           manifest_path.write_text(txt)
           print("Updated AndroidManifest.xml:")
           print(txt)
 
-          # 2. Generate circular Coral (#F08076) launcher icon with centered "a" in Playwrite US Trad Guides
+          # 3. Write MainActivity.kt with MethodChannel("com.amodoro/share") for ACTION_SEND
+          kt_files = list(Path("android/app/src/main/kotlin").rglob("MainActivity.kt"))
+          if kt_files:
+              main_kt = kt_files[0]
+              main_kt.write_text("""package com.amodoro.amodoro_app
+
+          import android.content.Intent
+          import android.os.Bundle
+          import io.flutter.embedding.android.FlutterActivity
+          import io.flutter.embedding.engine.FlutterEngine
+          import io.flutter.plugin.common.MethodChannel
+
+          class MainActivity : FlutterActivity() {
+              private val CHANNEL = "com.amodoro/share"
+              private var initialSharedText: String? = null
+              private var methodChannel: MethodChannel? = null
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  handleSendIntent(intent, isInitial = true)
+              }
+
+              override fun onNewIntent(intent: Intent) {
+                  super.onNewIntent(intent)
+                  setIntent(intent)
+                  handleSendIntent(intent, isInitial = false)
+              }
+
+              private fun handleSendIntent(intent: Intent?, isInitial: Boolean) {
+                  if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
+                      val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+                      if (!sharedText.isNullOrBlank()) {
+                          if (isInitial && methodChannel == null) {
+                              initialSharedText = sharedText
+                          } else {
+                              methodChannel?.invokeMethod("onSharedText", sharedText)
+                          }
+                      }
+                  }
+              }
+
+              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+                  super.configureFlutterEngine(flutterEngine)
+                  val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+                  methodChannel = channel
+                  channel.setMethodCallHandler { call, result ->
+                      if (call.method == "getInitialSharedText") {
+                          val pending = initialSharedText
+                          initialSharedText = null
+                          result.success(pending)
+                      } else {
+                          result.notImplemented()
+                      }
+                  }
+              }
+          }
+          """.replace("\n          ", "\n").lstrip())
+              print(f"Updated {main_kt} with MethodChannel(com.amodoro/share)")
+
+          # 4. Generate circular Coral (#F27166) launcher icon with centered "a" in Playwrite US Trad Guides
           res_dir = Path("android/app/src/main/res")
           for xml_dir in res_dir.glob("mipmap-anydpi*"):
               shutil.rmtree(xml_dir, ignore_errors=True)
 
-          # Render at high resolution (1024x1024) for crisp anti-aliasing, then downscale
           hi_size = 1024
           hi_img = Image.new("RGBA", (hi_size, hi_size), (0, 0, 0, 0))
           draw = ImageDraw.Draw(hi_img)
-          # Coral circle (#F08076) matching top active pill
           margin = 36
           draw.ellipse(
               (margin, margin, hi_size - margin, hi_size - margin),
-              fill=(240, 128, 118, 255),
+              fill=(242, 113, 102, 255),
           )
           font = ImageFont.truetype("/tmp/PlaywriteUSTradGuides-Regular.ttf", 520)
           bbox = draw.textbbox((0, 0), "a", font=font)
@@ -105,7 +236,7 @@ jobs:
               resized = hi_img.resize((sz, sz), Image.Resampling.LANCZOS)
               resized.save(target_dir / "ic_launcher.png")
               resized.save(target_dir / "ic_launcher_round.png")
-          print("Generated Coral 'a' Playwrite US Trad Guides launcher icons in all mipmap folders.")
+          print("Generated Neo-Pastel Salmon (#F27166) 'a' launcher icons in all mipmap folders.")
           PY
 
       - name: Install Flutter dependencies & verify
@@ -135,8 +266,8 @@ jobs:
       - name: Publish GitHub Release with APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.4.0
-          name: "amodoro v1.4.0 (Android APK + Azure VPS)"
+          tag_name: v1.5.0
+          name: "amodoro v1.5.0 (Neo-Pastel + Security + PIN + Historial + FCM)"
           files: |
             amodoro.apk
             amodoro-arm64.apk

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/amodoro_theme.dart';
+import 'pressable_button.dart';
 
 class LinkPreviewCard extends StatelessWidget {
   final String url;
@@ -62,7 +63,8 @@ class LinkPreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final surface = Colors.white.withValues(alpha: 0.78);
+    final cardBg = Colors.white.withValues(alpha: 0.85);
+    final borderColor = AmodoroTheme.darkenForPerspective(cardBgColor, 0.16);
     const ink = Color(0xFF1F1B18);
     const muted = Color(0xFF5A524C);
     final platformName = _detectPlatformLabel();
@@ -72,11 +74,12 @@ class LinkPreviewCard extends StatelessWidget {
     final content = GestureDetector(
       onTap: _openExternal,
       child: Container(
-        decoration: AmodoroTheme.floatingPerspectiveBox(
-          color: surface,
-          radius: 18,
-          thickness: 2.5,
-          perspectiveEdgeColor: AmodoroTheme.darkenForPerspective(cardBgColor, 0.25),
+        decoration: AmodoroTheme.cardOutlineBox(
+          color: cardBg,
+          radius: 22,
+          borderColor: borderColor,
+          borderWidth: 2.0,
+          subtleShadow: false,
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
@@ -136,7 +139,7 @@ class LinkPreviewCard extends StatelessWidget {
                     ),
                   ),
                 Padding(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   child: Row(
                     children: [
                       Container(
@@ -161,8 +164,9 @@ class LinkPreviewCard extends StatelessWidget {
                           children: [
                             Text(
                               platformName,
-                              style: const TextStyle(
+                              style: AmodoroTheme.googleSans(
                                 fontSize: 10,
+                                fontWeight: FontWeight.w700,
                                 letterSpacing: 1.2,
                                 color: muted,
                               ),
@@ -172,8 +176,9 @@ class LinkPreviewCard extends StatelessWidget {
                               displayTitle,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: AmodoroTheme.googleSans(
                                 fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
                                 color: ink,
                                 height: 1.25,
                               ),
@@ -181,11 +186,37 @@ class LinkPreviewCard extends StatelessWidget {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      AmodoroTheme.sysIcon(
-                        Symbols.open_in_new,
-                        size: 18,
-                        color: muted,
+                      const SizedBox(width: 8),
+                      AmodoroPressableButton(
+                        onTap: _openExternal,
+                        color: AmodoroTheme.coralPillLight,
+                        lipColor: AmodoroTheme.coralPillBorderLight,
+                        lipHeight: 3.0,
+                        radius: 14,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'ABRIR ENLACE',
+                              style: AmodoroTheme.googleSans(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            AmodoroTheme.sysIcon(
+                              Symbols.open_in_new,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -196,22 +227,19 @@ class LinkPreviewCard extends StatelessWidget {
               Positioned(
                 top: 8,
                 right: 8,
-                child: GestureDetector(
+                child: AmodoroPressableButton(
                   onTap: onRemove,
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: AmodoroTheme.floatingPerspectiveBox(
-                      color: const Color(0xFFFCF9F5),
-                      radius: 99,
-                      thickness: 2.0,
-                    ),
-                    child: Center(
-                      child: AmodoroTheme.sysIcon(
-                        Symbols.close,
-                        size: 16,
-                        color: ink,
-                      ),
+                  color: const Color(0xFFFCF9F5),
+                  lipColor: const Color(0xFFDCD6CE),
+                  lipHeight: 2.0,
+                  radius: 99,
+                  width: 32,
+                  height: 32,
+                  child: Center(
+                    child: AmodoroTheme.sysIcon(
+                      Symbols.close,
+                      size: 16,
+                      color: ink,
                     ),
                   ),
                 ),

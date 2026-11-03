@@ -11,7 +11,13 @@ import {
   updateHomeCard,
 } from "@/lib/home-cards";
 import { fetchLinkPreview } from "@/lib/link-preview";
-import { UPLOADS_PATH } from "@/lib/media";
+import {
+  MAX_IMAGE_BYTES,
+  UPLOADS_PATH,
+  checkMediaQuota,
+  detectImageMimeFromMagicBytes,
+} from "@/lib/media";
+import { sendPushToPartner } from "@/lib/push";
 
 export async function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -21,32 +27,32 @@ export async function storeBase64Media(input: {
   base64: string;
   mime?: string;
   kind?: "image" | "drawing";
+  altText?: string | null;
   ownerId: number;
 }): Promise<number> {
-  const matchMime = /^data:([^;]+);base64,/.exec(input.base64);
-  const detectedMime = matchMime?.[1] || input.mime || "image/png";
   const cleaned = input.base64.replace(/^data:[^;]+;base64,/, "").trim();
   const bytes = Buffer.from(cleaned, "base64");
-  if (bytes.byteLength === 0 || bytes.byteLength > 25 * 1024 * 1024) {
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_IMAGE_BYTES) {
     throw new Error("Tamaño de imagen no válido.");
   }
 
-  const ext =
-    detectedMime === "image/jpeg" || detectedMime === "image/jpg"
-      ? "jpg"
-      : detectedMime === "image/webp"
-        ? "webp"
-        : detectedMime === "image/gif"
-          ? "gif"
-          : "png";
+  const detected = detectImageMimeFromMagicBytes(bytes);
+  if (!detected) {
+    throw new Error("Formato de imagen no permitido.");
+  }
+
+  checkMediaQuota(bytes.byteLength);
 
   const id = randomUUID();
-  const relPath = `${id.slice(0, 2)}/${id}.${ext}`;
+  const relPath = `${id.slice(0, 2)}/${id}.${detected.ext}`;
   const targetDir = join(
     /*turbopackIgnore: true*/ UPLOADS_PATH,
     id.slice(0, 2),
   );
-  const fullPath = join(/*turbopackIgnore: true*/ targetDir, `${id}.${ext}`);
+  const fullPath = join(
+    /*turbopackIgnore: true*/ targetDir,
+    `${id}.${detected.ext}`,
+  );
 
   await mkdir(targetDir, { recursive: true });
   await writeFile(fullPath, bytes);
@@ -57,8 +63,9 @@ export async function storeBase64Media(input: {
       ownerId: input.ownerId,
       kind: input.kind ?? "image",
       path: relPath,
-      mime: detectedMime,
+      mime: detected.mime,
       bytes: bytes.byteLength,
+      altText: input.altText?.trim() || null,
       createdAt: new Date(),
     })
     .returning({ id: media.id })
@@ -78,6 +85,7 @@ export async function POST(request: Request) {
       action: "create_card" | "update_card" | "delete_card" | "react";
       body?: string;
       textContent?: string;
+      altText?: string | null;
       bgColor?: string;
       fontFamily?: CardFont;
       fontSize?: CardFontSize;
@@ -108,6 +116,7 @@ export async function POST(request: Request) {
           kind:
             payload.mediaKind ??
             (payload.mediaType === "drawing" ? "drawing" : "image"),
+          altText: payload.altText,
           ownerId: user.id,
         });
       }
@@ -130,6 +139,7 @@ export async function POST(request: Request) {
         authorId: user.id,
         mediaId,
         mediaType: payload.mediaType,
+        altText: payload.altText,
         linkUrl: rawLink || null,
         linkTitle,
         linkThumbnail,
@@ -139,6 +149,12 @@ export async function POST(request: Request) {
         fontFamily: payload.fontFamily ?? "sans",
         fontSize: payload.fontSize ?? "md",
         fontSizePx: payload.fontSizePx,
+      });
+
+      void sendPushToPartner(user.id, {
+        title: "Nueva nota en Amodoro 💌",
+        body: textBody ? textBody.slice(0, 80) : "Tu pareja te dejó una nueva tarjeta.",
+        data: { type: "home_card", cardId: String(card.id) },
       });
 
       return jsonResponse({ ok: true, card });
@@ -160,6 +176,7 @@ export async function POST(request: Request) {
           kind:
             payload.mediaKind ??
             (payload.mediaType === "drawing" ? "drawing" : "image"),
+          altText: payload.altText,
           ownerId: user.id,
         });
       }
@@ -184,6 +201,7 @@ export async function POST(request: Request) {
         newMediaId,
         keepExistingMedia: payload.keepExistingMedia === true,
         mediaType: payload.mediaType,
+        altText: payload.altText,
         linkUrl: rawLink || null,
         linkTitle,
         linkThumbnail,
@@ -215,13 +233,25 @@ export async function POST(request: Request) {
       if (!Number.isInteger(cardId)) {
         return jsonResponse({ ok: false, error: "cardId inválido" }, 400);
       }
-      reactToHomeCard({
+      const res = reactToHomeCard({
         cardId,
         userId: user.id,
         emoji: payload.emoji ?? null,
         presetText: payload.presetText ?? null,
       });
-      return jsonResponse({ ok: true });
+
+      if (!res.removed) {
+        const summary = [payload.emoji, payload.presetText]
+          .filter(Boolean)
+          .join(" ");
+        void sendPushToPartner(user.id, {
+          title: "Nueva reacción ❤️",
+          body: summary || "Tu pareja reaccionó a tu nota.",
+          data: { type: "reaction", cardId: String(cardId) },
+        });
+      }
+
+      return jsonResponse({ ok: true, removed: res.removed });
     }
 
     return jsonResponse({ ok: false, error: "Acción desconocida" }, 400);

@@ -1,15 +1,12 @@
 import { createHash, randomBytes } from "node:crypto";
 import { hash, verify } from "@node-rs/argon2";
-import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, ne, or, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { db } from "@/db";
+import { db, rawSqlite } from "@/db";
 import {
-  boardItems,
   boards,
-  homeCardReactions,
-  homeCards,
   inviteTokens,
   sessions,
   users,
@@ -19,17 +16,17 @@ import {
 } from "@/db/schema";
 
 const SESSION_COOKIE = "amodoro_session";
-const SESSION_DAYS = 365;
+export const SESSION_DAYS = 90;
 
-function sha256(value: string): string {
+export function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function normalizeShortCode(raw: string): string {
+export function normalizeShortCode(raw: string): string {
   return raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
-function generateReadableShortCode(): string {
+export function generateReadableShortCode(): string {
   const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
   const bytes = randomBytes(8);
   let chars = "";
@@ -41,46 +38,95 @@ function generateReadableShortCode(): string {
 
 let seededChecked = false;
 
+const SYSTEM_BOARD_DEFS = [
+  {
+    slug: "actividades",
+    title: "PENDIENTES",
+    icon: "schedule",
+    bgColor: "#F27166",
+    oldColors: ["#F08076", "#FFDAD6", "#F4EFE8"],
+    sortOrder: 0,
+  },
+  {
+    slug: "musica",
+    title: "MÚSICA",
+    icon: "album",
+    bgColor: "#A855F7",
+    oldColors: ["#E8DEF8", "#F4EFE8"],
+    sortOrder: 1,
+  },
+  {
+    slug: "pelis",
+    title: "PELIS",
+    icon: "movie",
+    bgColor: "#F97316",
+    oldColors: ["#FFDAD6", "#F4EFE8"],
+    sortOrder: 2,
+  },
+  {
+    slug: "series",
+    title: "SERIES",
+    icon: "tv",
+    bgColor: "#3B82F6",
+    oldColors: ["#D3E4FF", "#F4EFE8"],
+    sortOrder: 3,
+  },
+  {
+    slug: "juegos",
+    title: "JUEGOS",
+    icon: "sports_esports",
+    bgColor: "#10B981",
+    oldColors: ["#C8E6C9", "#F4EFE8"],
+    sortOrder: 4,
+  },
+] as const;
+
 export function ensureInitialSeed() {
   if (seededChecked) return;
   const now = new Date();
   const existingUsers = db.select().from(users).all();
   const allBoards = db.select().from(boards).all();
 
-  const act = allBoards.find((b) => b.slug === "actividades");
-  if (act && act.title !== "PENDIENTES") {
-    db.update(boards)
-      .set({ title: "PENDIENTES", icon: "schedule" })
-      .where(eq(boards.id, act.id))
-      .run();
-  }
-
-  const ensureBoard = (
-    slug: string,
-    title: string,
-    icon: string,
-    bgColor: string,
-  ) => {
-    if (!allBoards.some((b) => b.slug === slug)) {
+  for (const def of SYSTEM_BOARD_DEFS) {
+    const existing = allBoards.find((b) => b.slug === def.slug);
+    if (!existing) {
       db.insert(boards)
         .values({
-          slug,
-          title,
-          icon,
-          bgColor,
+          slug: def.slug,
+          title: def.title,
+          icon: def.icon,
+          bgColor: def.bgColor,
+          sortOrder: def.sortOrder,
           isSystem: true,
           createdBy: existingUsers[0]?.id ?? null,
           createdAt: now,
         })
         .run();
+    } else {
+      const updates: Partial<typeof boards.$inferInsert> = {};
+      if (def.slug === "actividades" && existing.title !== "PENDIENTES") {
+        updates.title = "PENDIENTES";
+        updates.icon = "schedule";
+      }
+      if (
+        existing.isSystem &&
+        (def.oldColors as readonly string[]).includes(
+          (existing.bgColor || "").toUpperCase(),
+        )
+      ) {
+        updates.bgColor = def.bgColor;
+      }
+      if (existing.sortOrder === 0 && def.sortOrder !== 0) {
+        updates.sortOrder = def.sortOrder;
+      }
+      if (Object.keys(updates).length > 0) {
+        db.update(boards)
+          .set(updates)
+          .where(eq(boards.id, existing.id))
+          .run();
+      }
     }
-  };
-
-  ensureBoard("actividades", "PENDIENTES", "schedule", "#F08076");
-  ensureBoard("musica", "MÚSICA", "album", "#E8DEF8");
-  ensureBoard("pelis", "PELIS", "movie", "#FFDAD6");
-  ensureBoard("series", "SERIES", "tv", "#D3E4FF");
-  ensureBoard("juegos", "JUEGOS", "sports_esports", "#C8E6C9");
+  }
 
   seededChecked = true;
 }
@@ -90,6 +136,7 @@ export async function hashPassword(password: string) {
 }
 
 export async function verifyPassword(hashStr: string, password: string) {
+  if (!hashStr || !password) return false;
   try {
     return await verify(hashStr, password);
   } catch {
@@ -122,10 +169,12 @@ export async function createSessionForUser(
     }
   }
 
-  const id = randomBytes(32).toString("base64url");
+  const rawToken = randomBytes(32).toString("base64url");
+  const tokenHash = sha256(rawToken);
+
   db.insert(sessions)
     .values({
-      id,
+      id: tokenHash,
       userId,
       createdAt: now,
       expiresAt: expires,
@@ -136,7 +185,7 @@ export async function createSessionForUser(
 
   try {
     const store = await cookies();
-    store.set(SESSION_COOKIE, id, {
+    store.set(SESSION_COOKIE, rawToken, {
       httpOnly: true,
       sameSite: "lax",
       secure: cookieIsSecure(),
@@ -147,14 +196,22 @@ export async function createSessionForUser(
     // Ignore when called outside Next.js cookie context
   }
 
-  return { id, expires };
+  return { id: rawToken, tokenHash, expires };
+}
+
+export function deleteSessionByToken(rawToken: string) {
+  if (!rawToken) return;
+  const tokenHash = sha256(rawToken);
+  db.delete(sessions)
+    .where(or(eq(sessions.id, tokenHash), eq(sessions.id, rawToken)))
+    .run();
 }
 
 export async function clearCurrentSession() {
   const store = await cookies();
   const id = store.get(SESSION_COOKIE)?.value;
   if (id) {
-    db.delete(sessions).where(eq(sessions.id, id)).run();
+    deleteSessionByToken(id);
   }
   store.delete(SESSION_COOKIE);
 }
@@ -162,15 +219,19 @@ export async function clearCurrentSession() {
 export const currentUser = cache(async () => {
   ensureInitialSeed();
   const store = await cookies();
-  const id = store.get(SESSION_COOKIE)?.value;
-  if (!id) return null;
+  const rawToken = store.get(SESSION_COOKIE)?.value;
+  if (!rawToken) return null;
 
+  const tokenHash = sha256(rawToken);
   const row = db
     .select({ user: users, session: sessions })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
     .where(
-      and(eq(sessions.id, id), gt(sessions.expiresAt, sql`unixepoch('now')`)),
+      and(
+        or(eq(sessions.id, tokenHash), eq(sessions.id, rawToken)),
+        gt(sessions.expiresAt, sql`unixepoch('now')`),
+      ),
     )
     .get();
 
@@ -185,7 +246,7 @@ export const currentUser = cache(async () => {
       lastSeenAt: new Date(nowSec * 1000),
       expiresAt: new Date(newExpiresSec * 1000),
     })
-    .where(eq(sessions.id, id))
+    .where(eq(sessions.id, row.session.id))
     .run();
 
   return row.user;
@@ -194,7 +255,7 @@ export const currentUser = cache(async () => {
 export async function requirePageUser() {
   const user = await currentUser();
   if (!user) {
-    redirect("/entrar");
+    redirect("/");
   }
   return user;
 }
@@ -218,14 +279,41 @@ export function getPartnerUser(myUserId: number) {
 export async function registerNewUser(input: {
   username?: string;
   displayName: string;
+  pin?: string;
   password?: string;
   avatarId?: AvatarId;
+  code?: string;
 }) {
   ensureInitialSeed();
-  const cleanName = input.displayName.trim();
-  if (!cleanName) {
-    throw new Error("Elige un nombre para continuar.");
+  const existing = getAllUsers();
+  if (existing.length >= 2) {
+    throw new Error("Este espacio privado ya tiene sus 2 cuentas registradas.");
   }
+
+  const cleanName = input.displayName.trim();
+  if (!cleanName || cleanName.length > 40) {
+    throw new Error("Elige un nombre válido (1 a 40 caracteres).");
+  }
+
+  const rawPin = input.pin?.trim();
+  const rawPassword = input.password?.trim();
+
+  if (rawPin !== undefined) {
+    if (!/^\d{4}$/.test(rawPin)) {
+      throw new Error("El PIN debe tener exactamente 4 dígitos numéricos.");
+    }
+  } else if (!rawPassword) {
+    throw new Error("El PIN debe tener exactamente 4 dígitos numéricos.");
+  }
+
+  const pinToHash =
+    rawPin ?? (rawPassword && /^\d{4}$/.test(rawPassword) ? rawPassword : "");
+  const secretToHash = rawPin || rawPassword!;
+  const hashedSecret = await hashPassword(secretToHash);
+  const pinHash = pinToHash ? hashedSecret : "";
+
+  const recoveryCode = generateReadableShortCode();
+  const recoveryCodeHash = sha256(normalizeShortCode(recoveryCode));
 
   const rawUsername = (input.username?.trim() || cleanName)
     .toLowerCase()
@@ -235,19 +323,17 @@ export async function registerNewUser(input: {
 
   const baseUsername = rawUsername || `user_${Date.now().toString(36)}`;
   let finalUsername = baseUsername;
-  const existing = getAllUsers();
   if (existing.some((u) => u.username.toLowerCase() === finalUsername)) {
     finalUsername = `${baseUsername}_${Math.floor(100 + Math.random() * 900)}`;
   }
-
-  const pwd = input.password?.trim() || "amodoro2025";
-  const passwordHash = await hashPassword(pwd);
 
   const created = db
     .insert(users)
     .values({
       username: finalUsername,
-      passwordHash,
+      passwordHash: hashedSecret,
+      pinHash,
+      recoveryCodeHash,
       displayName: cleanName,
       avatarId: input.avatarId || "cat",
       partnerId: null,
@@ -259,7 +345,20 @@ export async function registerNewUser(input: {
     .returning()
     .get();
 
-  return created;
+  if (input.code && input.code.trim()) {
+    redeemInviteByTokenOrCode({
+      code: input.code.trim(),
+      redeemingUserId: created.id,
+    });
+  }
+
+  const refreshed =
+    db.select().from(users).where(eq(users.id, created.id)).get() ?? created;
+
+  return {
+    ...refreshed,
+    recoveryCode,
+  };
 }
 
 export function createInviteForUser(userId: number) {
@@ -293,6 +392,10 @@ export function redeemInviteByTokenOrCode(input: {
   redeemingUserId?: number;
 }): number | null {
   ensureInitialSeed();
+  if (!input.redeemingUserId) {
+    throw new Error("Debes iniciar sesión o registrarte antes de vincular un código.");
+  }
+
   const now = new Date();
   let inviterUserId: number | null = null;
   let tokenId: number | null = null;
@@ -337,27 +440,188 @@ export function redeemInviteByTokenOrCode(input: {
   }
 
   if (!inviterUserId || !tokenId) return null;
-
-  db.update(inviteTokens)
-    .set({ usedAt: now })
-    .where(eq(inviteTokens.id, tokenId))
-    .run();
-
-  // If a logged-in/newly-registered user is redeeming their partner's code, pair both accounts!
-  if (input.redeemingUserId && input.redeemingUserId !== inviterUserId) {
-    db.update(users)
-      .set({ partnerId: inviterUserId })
-      .where(eq(users.id, input.redeemingUserId))
-      .run();
-    db.update(users)
-      .set({ partnerId: input.redeemingUserId })
-      .where(eq(users.id, inviterUserId))
-      .run();
-    return input.redeemingUserId;
+  if (input.redeemingUserId === inviterUserId) {
+    throw new Error("No puedes usar tu propio código de invitación.");
   }
 
-  const inviterPartner = getPartnerUser(inviterUserId);
-  return inviterPartner?.id ?? inviterUserId;
+  const all = getAllUsers();
+  const inviter = all.find((u) => u.id === inviterUserId);
+  const redeemer = all.find((u) => u.id === input.redeemingUserId);
+  if (!inviter || !redeemer) return null;
+
+  if (inviter.partnerId && inviter.partnerId !== redeemer.id) {
+    throw new Error("Esta cuenta ya está vinculada con otra persona.");
+  }
+  if (redeemer.partnerId && redeemer.partnerId !== inviter.id) {
+    throw new Error("Tu cuenta ya está vinculada con otra persona.");
+  }
+
+  const runPairTx = rawSqlite.transaction(() => {
+    db.update(inviteTokens)
+      .set({ usedAt: now })
+      .where(eq(inviteTokens.id, tokenId!))
+      .run();
+
+    db.update(users)
+      .set({ partnerId: inviterUserId! })
+      .where(eq(users.id, redeemer.id))
+      .run();
+
+    db.update(users)
+      .set({ partnerId: redeemer.id })
+      .where(eq(users.id, inviterUserId!))
+      .run();
+  });
+
+  runPairTx();
+  return redeemer.id;
+}
+
+export async function verifyUserPin(userId: number, pin: string): Promise<boolean> {
+  if (!/^\d{4}$/.test(pin.trim())) return false;
+  const user = db.select().from(users).where(eq(users.id, userId)).get();
+  if (!user) return false;
+  if (user.pinHash) {
+    return verifyPassword(user.pinHash, pin.trim());
+  }
+  return verifyPassword(user.passwordHash, pin.trim());
+}
+
+export async function changeUserPin(input: {
+  userId: number;
+  currentPin?: string;
+  newPin: string;
+  keepSessionHash?: string;
+}): Promise<{ recoveryCode: string }> {
+  const cleanNewPin = input.newPin.trim();
+  if (!/^\d{4}$/.test(cleanNewPin)) {
+    throw new Error("El nuevo PIN debe tener exactamente 4 dígitos numéricos.");
+  }
+
+  const user = db.select().from(users).where(eq(users.id, input.userId)).get();
+  if (!user) {
+    throw new Error("Usuario no encontrado.");
+  }
+
+  if (user.pinHash) {
+    if (!input.currentPin) {
+      throw new Error("Ingresa tu PIN actual para cambiarlo.");
+    }
+    const valid = await verifyPassword(user.pinHash, input.currentPin.trim());
+    if (!valid) {
+      throw new Error("El PIN actual es incorrecto.");
+    }
+  }
+
+  const newPinHash = await hashPassword(cleanNewPin);
+  const recoveryCode = generateReadableShortCode();
+  const recoveryCodeHash = sha256(normalizeShortCode(recoveryCode));
+
+  db.update(users)
+    .set({
+      pinHash: newPinHash,
+      passwordHash: newPinHash,
+      recoveryCodeHash,
+    })
+    .where(eq(users.id, user.id))
+    .run();
+
+  if (input.keepSessionHash) {
+    db.delete(sessions)
+      .where(
+        and(
+          eq(sessions.userId, user.id),
+          ne(sessions.id, input.keepSessionHash),
+        ),
+      )
+      .run();
+  } else {
+    db.delete(sessions).where(eq(sessions.userId, user.id)).run();
+  }
+
+  return { recoveryCode };
+}
+
+export async function recoverUserPin(input: {
+  userId: number;
+  recoveryCode: string;
+  newPin: string;
+}): Promise<{ recoveryCode: string }> {
+  const cleanNewPin = input.newPin.trim();
+  if (!/^\d{4}$/.test(cleanNewPin)) {
+    throw new Error("El nuevo PIN debe tener exactamente 4 dígitos numéricos.");
+  }
+
+  const normalizedCode = normalizeShortCode(input.recoveryCode);
+  if (!normalizedCode) {
+    throw new Error("Código de recuperación inválido.");
+  }
+
+  const user = db.select().from(users).where(eq(users.id, input.userId)).get();
+  if (!user) {
+    throw new Error("Usuario no encontrado.");
+  }
+
+  const codeHash = sha256(normalizedCode);
+  let validRecovery = false;
+
+  if (user.recoveryCodeHash && user.recoveryCodeHash === codeHash) {
+    validRecovery = true;
+  } else {
+    // Also check if partner generated an active invite/reset code
+    const now = new Date();
+    const partner = getPartnerUser(user.id);
+    if (partner) {
+      const partnerToken = db
+        .select()
+        .from(inviteTokens)
+        .where(
+          and(
+            eq(inviteTokens.userId, partner.id),
+            eq(inviteTokens.codeHash, codeHash),
+            isNull(inviteTokens.usedAt),
+            gt(inviteTokens.expiresAt, now),
+          ),
+        )
+        .get();
+      if (partnerToken) {
+        validRecovery = true;
+        db.update(inviteTokens)
+          .set({ usedAt: now })
+          .where(eq(inviteTokens.id, partnerToken.id))
+          .run();
+      }
+    }
+  }
+
+  if (!validRecovery) {
+    throw new Error("Código de recuperación incorrecto o expirado.");
+  }
+
+  const newPinHash = await hashPassword(cleanNewPin);
+  const newRecoveryCode = generateReadableShortCode();
+  const newRecoveryCodeHash = sha256(normalizeShortCode(newRecoveryCode));
+
+  db.update(users)
+    .set({
+      pinHash: newPinHash,
+      passwordHash: newPinHash,
+      recoveryCodeHash: newRecoveryCodeHash,
+    })
+    .where(eq(users.id, user.id))
+    .run();
+
+  db.delete(sessions).where(eq(sessions.userId, user.id)).run();
+
+  return { recoveryCode: newRecoveryCode };
+}
+
+export function updateUserFcmToken(userId: number, fcmToken: string | null) {
+  const clean = fcmToken?.trim() || null;
+  db.update(users)
+    .set({ fcmToken: clean })
+    .where(eq(users.id, userId))
+    .run();
 }
 
 export function updateUserSettings(input: {

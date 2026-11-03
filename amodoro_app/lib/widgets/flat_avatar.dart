@@ -66,12 +66,16 @@ class FlatAvatarBadge extends StatelessWidget {
   final String avatarId;
   final double size;
   final bool showPerspectiveBorder;
+  final Color? borderColor;
+  final double? borderWidth;
 
   const FlatAvatarBadge({
     super.key,
     required this.avatarId,
     this.size = 48.0,
     this.showPerspectiveBorder = false,
+    this.borderColor,
+    this.borderWidth,
   });
 
   /// The list of predefined avatar presets.
@@ -82,16 +86,20 @@ class FlatAvatarBadge extends StatelessWidget {
     final option = flatAvatarFor(avatarId);
     final bgColor = option.background;
 
-    final decoration = showPerspectiveBorder
-        ? AmodoroTheme.floatingPerspectiveBox(
-            color: bgColor,
-            radius: size,
-            thickness: 2.0,
-          )
-        : BoxDecoration(
-            color: bgColor,
-            shape: BoxShape.circle,
-          );
+    final effectiveBorderColor =
+        borderColor ?? AmodoroTheme.darkenForPerspective(bgColor, 0.16);
+    final effectiveBorderWidth =
+        (borderWidth != null && borderWidth! > 0) ? borderWidth! : 2.0;
+
+    final decoration = BoxDecoration(
+      color: bgColor,
+      shape: BoxShape.circle,
+      border: Border.all(
+        color: effectiveBorderColor,
+        width: effectiveBorderWidth,
+      ),
+      boxShadow: const [],
+    );
 
     return Container(
       width: size,
@@ -119,6 +127,8 @@ class FlatAvatar extends FlatAvatarBadge {
     required super.avatarId,
     super.size = 48.0,
     super.showPerspectiveBorder = false,
+    super.borderColor,
+    super.borderWidth,
   });
 }
 

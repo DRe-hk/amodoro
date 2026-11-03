@@ -1,14 +1,21 @@
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { sessions, users, type AvatarId } from "@/db/schema";
 import {
+  SESSION_DAYS,
+  changeUserPin,
   createSessionForUser,
+  deleteSessionByToken,
   ensureInitialSeed,
   getAllUsers,
+  recoverUserPin,
   redeemInviteByTokenOrCode,
   registerNewUser,
+  sha256,
   verifyPassword,
+  verifyUserPin,
 } from "./auth";
+import { checkRateLimit, logSecurityEvent, resetRateLimit } from "./rate-limit";
 
 export const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -26,95 +33,236 @@ export function jsonResponse(data: unknown, status = 200): Response {
   });
 }
 
-export function getApiUser(request: Request) {
-  ensureInitialSeed();
+export function extractRawTokenFromRequest(request: Request): string {
   const authHeader = request.headers.get("authorization") ?? "";
-  let token = "";
   if (authHeader.toLowerCase().startsWith("bearer ")) {
-    token = authHeader.slice(7).trim();
+    const token = authHeader.slice(7).trim();
+    if (token) return token;
   }
 
-  if (!token) {
-    const cookieHeader = request.headers.get("cookie") ?? "";
-    const match = /amodoro_session=([^;]+)/.exec(cookieHeader);
-    if (match?.[1]) {
-      token = decodeURIComponent(match[1]);
-    }
+  const cookieHeader = request.headers.get("cookie") ?? "";
+  const match = /amodoro_session=([^;]+)/.exec(cookieHeader);
+  if (match?.[1]) {
+    return decodeURIComponent(match[1]);
   }
 
-  if (!token) return null;
+  return "";
+}
+
+function validateSessionToken(rawToken: string) {
+  if (!rawToken) return null;
+  const tokenHash = sha256(rawToken);
 
   const row = db
     .select({ user: users, session: sessions })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
     .where(
-      and(eq(sessions.id, token), gt(sessions.expiresAt, sql`unixepoch('now')`)),
+      and(
+        or(eq(sessions.id, tokenHash), eq(sessions.id, rawToken)),
+        gt(sessions.expiresAt, sql`unixepoch('now')`),
+      ),
     )
     .get();
 
   if (!row) return null;
 
   const nowSec = Math.floor(Date.now() / 1000);
-  const newExpiresSec = nowSec + 365 * 86_400;
+  const newExpiresSec = nowSec + SESSION_DAYS * 86_400;
   db.update(sessions)
     .set({
       lastSeenAt: new Date(nowSec * 1000),
       expiresAt: new Date(newExpiresSec * 1000),
     })
-    .where(eq(sessions.id, token))
+    .where(eq(sessions.id, row.session.id))
     .run();
 
   return row.user;
 }
 
+export function getApiUser(request: Request) {
+  ensureInitialSeed();
+  const token = extractRawTokenFromRequest(request);
+  return validateSessionToken(token);
+}
+
+export function getApiUserFromRequestOrQuery(request: Request) {
+  ensureInitialSeed();
+  const fromHeader = getApiUser(request);
+  if (fromHeader) return fromHeader;
+
+  try {
+    const url = new URL(request.url);
+    const queryToken = url.searchParams.get("t")?.trim() ?? "";
+    if (queryToken) {
+      return validateSessionToken(queryToken);
+    }
+  } catch {
+    // ignore URL parse error
+  }
+  return null;
+}
+
+export type AuthMode =
+  | "register"
+  | "pair"
+  | "code"
+  | "verify_pin"
+  | "pin_login"
+  | "password"
+  | "change_pin"
+  | "recover_pin"
+  | "logout";
+
 export async function loginApiUser(input: {
-  mode: "password" | "code" | "quick" | "register" | "pair";
+  mode: AuthMode;
   username?: string;
   displayName?: string;
   avatarId?: AvatarId;
+  pin?: string;
+  currentPin?: string;
+  newPin?: string;
+  recoveryCode?: string;
   password?: string;
   code?: string;
   userId?: number;
   currentUserId?: number;
+  rawToken?: string;
+  clientIp?: string;
   userAgent?: string | null;
 }) {
   ensureInitialSeed();
   const all = getAllUsers();
+  const ip = input.clientIp || "local";
+
+  if (input.mode === "logout") {
+    if (input.rawToken) {
+      deleteSessionByToken(input.rawToken);
+    }
+    return { loggedOut: true as const };
+  }
 
   let targetUser: (typeof users.$inferSelect) | undefined;
+  let recoveryCodeIssued: string | undefined;
 
   if (input.mode === "register") {
-    targetUser = await registerNewUser({
+    const rl = checkRateLimit(`register:${ip}`, 10, 15 * 60_000);
+    if (!rl.allowed) {
+      logSecurityEvent("register_rate_limited", { ip });
+      throw new Error("Demasiados intentos. Espera unos minutos.");
+    }
+    const created = await registerNewUser({
       username: input.username,
-      displayName: input.displayName || input.username || "Usuario",
+      displayName: input.displayName || input.username || "",
+      pin: input.pin,
       password: input.password,
       avatarId: input.avatarId || "cat",
+      code: input.code,
     });
-  } else if (input.mode === "pair") {
+    targetUser = created;
+    recoveryCodeIssued = created.recoveryCode;
+  } else if (input.mode === "pair" || input.mode === "code") {
+    const rl = checkRateLimit(`pair:${ip}`, 10, 15 * 60_000);
+    if (!rl.allowed) {
+      logSecurityEvent("pair_rate_limited", { ip });
+      throw new Error("Demasiados intentos de vinculación. Espera unos minutos.");
+    }
+    const redeemingId = input.currentUserId ?? input.userId;
+    if (!redeemingId) {
+      throw new Error("Inicia sesión o regístrate antes de vincular el código.");
+    }
     const redeemedId = redeemInviteByTokenOrCode({
       code: input.code,
-      redeemingUserId: input.currentUserId,
+      redeemingUserId: redeemingId,
     });
     if (redeemedId) {
       const updatedAll = getAllUsers();
       targetUser = updatedAll.find((u) => u.id === redeemedId);
     }
-  } else if (input.mode === "quick") {
-    targetUser = all.find((u) => u.id === Number(input.userId));
-    if (!targetUser && input.username) {
-      const clean = input.username.toLowerCase().trim();
-      targetUser = all.find((u) => u.username.toLowerCase() === clean);
+  } else if (input.mode === "verify_pin" || input.mode === "pin_login") {
+    const cleanPin = (input.pin ?? input.password ?? "").trim();
+    const candidateUser =
+      (input.currentUserId
+        ? all.find((u) => u.id === input.currentUserId)
+        : undefined) ??
+      (input.userId ? all.find((u) => u.id === Number(input.userId)) : undefined) ??
+      (input.username
+        ? all.find(
+            (u) =>
+              u.username.toLowerCase() === input.username!.toLowerCase().trim() ||
+              u.displayName.toLowerCase() === input.username!.toLowerCase().trim(),
+          )
+        : undefined);
+
+    const rateKey = `pin:${candidateUser?.id ?? ip}`;
+    const rl = checkRateLimit(rateKey, 5, 15 * 60_000);
+    if (!rl.allowed) {
+      logSecurityEvent("pin_lockout", { userId: candidateUser?.id, ip });
+      throw new Error(
+        `Demasiados intentos de PIN fallidos. Intenta de nuevo en ${Math.ceil(rl.retryAfterSec / 60)} min.`,
+      );
     }
-  } else if (input.mode === "code") {
-    const redeemedId = redeemInviteByTokenOrCode({
-      code: input.code,
-      redeemingUserId: input.currentUserId,
+
+    if (candidateUser && (await verifyUserPin(candidateUser.id, cleanPin))) {
+      resetRateLimit(rateKey);
+      targetUser = candidateUser;
+    } else {
+      logSecurityEvent("pin_failed", { userId: candidateUser?.id, ip });
+      return null;
+    }
+  } else if (input.mode === "change_pin") {
+    if (!input.currentUserId) {
+      throw new Error("No autorizado para cambiar el PIN.");
+    }
+    const rateKey = `change_pin:${input.currentUserId}`;
+    const rl = checkRateLimit(rateKey, 5, 15 * 60_000);
+    if (!rl.allowed) {
+      throw new Error("Demasiados intentos. Espera unos minutos.");
+    }
+    const res = await changeUserPin({
+      userId: input.currentUserId,
+      currentPin: input.currentPin,
+      newPin: input.newPin ?? "",
     });
-    if (redeemedId) {
-      const updatedAll = getAllUsers();
-      targetUser = updatedAll.find((u) => u.id === redeemedId);
+    resetRateLimit(rateKey);
+    recoveryCodeIssued = res.recoveryCode;
+    targetUser = getAllUsers().find((u) => u.id === input.currentUserId);
+  } else if (input.mode === "recover_pin") {
+    const candidateUser =
+      (input.currentUserId
+        ? all.find((u) => u.id === input.currentUserId)
+        : undefined) ??
+      (input.userId ? all.find((u) => u.id === Number(input.userId)) : undefined) ??
+      (input.username
+        ? all.find(
+            (u) =>
+              u.username.toLowerCase() === input.username!.toLowerCase().trim() ||
+              u.displayName.toLowerCase() === input.username!.toLowerCase().trim(),
+          )
+        : undefined);
+
+    const rateKey = `recover_pin:${candidateUser?.id ?? ip}`;
+    const rl = checkRateLimit(rateKey, 5, 15 * 60_000);
+    if (!rl.allowed) {
+      logSecurityEvent("recover_pin_rate_limited", {
+        userId: candidateUser?.id,
+        ip,
+      });
+      throw new Error("Demasiados intentos de recuperación. Espera 15 minutos.");
     }
+
+    if (!candidateUser) {
+      throw new Error("Cuenta no encontrada.");
+    }
+
+    const res = await recoverUserPin({
+      userId: candidateUser.id,
+      recoveryCode: input.recoveryCode ?? "",
+      newPin: input.newPin ?? "",
+    });
+    resetRateLimit(rateKey);
+    recoveryCodeIssued = res.recoveryCode;
+    targetUser = getAllUsers().find((u) => u.id === candidateUser.id);
   } else if (input.mode === "password") {
     const clean = (input.username ?? "").toLowerCase().trim();
     const found = all.find(
@@ -122,18 +270,26 @@ export async function loginApiUser(input: {
         u.username.toLowerCase() === clean ||
         (u.displayName && u.displayName.toLowerCase() === clean),
     );
+    const rateKey = `pwd:${found?.id ?? ip}`;
+    const rl = checkRateLimit(rateKey, 5, 15 * 60_000);
+    if (!rl.allowed) {
+      logSecurityEvent("password_rate_limited", { userId: found?.id, ip });
+      throw new Error("Demasiados intentos fallidos. Espera 15 minutos.");
+    }
     if (found) {
-      const pass = (input.password ?? "").trim();
-      const validSeedPass =
-        pass === "amodoro2025" ||
-        pass === "amodoro" ||
-        pass === "1234" ||
-        pass === found.username;
-      const validHash = await verifyPassword(found.passwordHash, pass);
-      if (validSeedPass || validHash) {
+      const pass = (input.password ?? input.pin ?? "").trim();
+      const validHash =
+        (found.pinHash && (await verifyPassword(found.pinHash, pass))) ||
+        (await verifyPassword(found.passwordHash, pass));
+      if (validHash) {
+        resetRateLimit(rateKey);
         targetUser = found;
+      } else {
+        logSecurityEvent("password_failed", { userId: found.id, ip });
       }
     }
+  } else {
+    throw new Error("Modo de autenticación no soportado.");
   }
 
   if (!targetUser) return null;
@@ -146,5 +302,6 @@ export async function loginApiUser(input: {
     token: session.id,
     expiresAt: session.expires,
     user: targetUser,
+    recoveryCode: recoveryCodeIssued,
   };
 }

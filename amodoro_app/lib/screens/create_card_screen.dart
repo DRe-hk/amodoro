@@ -7,17 +7,22 @@ import '../services/api_client.dart';
 import '../theme/amodoro_theme.dart';
 import '../widgets/drawing_canvas.dart';
 import '../widgets/link_preview_card.dart';
+import '../widgets/pressable_button.dart';
 
 class CreateCardScreen extends StatefulWidget {
   final AmodoroApiClient api;
   final String partnerNickname;
   final HomeCardItem? existingCard;
+  final HomeCardItem? editingCard;
+  final String? initialSharedUrl;
 
   const CreateCardScreen({
     super.key,
     required this.api,
-    required this.partnerNickname,
+    this.partnerNickname = 'Pareja',
     this.existingCard,
+    this.editingCard,
+    this.initialSharedUrl,
   });
 
   @override
@@ -26,18 +31,19 @@ class CreateCardScreen extends StatefulWidget {
 
 class _CreateCardScreenState extends State<CreateCardScreen> {
   final TextEditingController _textController = TextEditingController();
+  late final TextEditingController _altTextController;
+  final TextEditingController _linkController = TextEditingController();
   final DrawingCanvasController _drawingController = DrawingCanvasController();
   final ImagePicker _picker = ImagePicker();
 
-  // 'none' = cuadrícula de 4 opciones (si no elige ninguna o cancela, se envía solo texto)
-  // 'existing_media' = imagen o dibujo existente de una tarjeta enviada
-  // 'photo' = foto tomada o imagen elegida
-  // 'drawing' = lienzo de dibujo activo
+  // 'none' = cuadrícula de 4 opciones
+  // 'image' = foto tomada o imagen elegida (nueva o existente)
+  // 'drawing' = lienzo de dibujo activo (nuevo o existente)
   // 'link' = link embebido con vista previa
-  String _mediaMode = 'none';
+  String _mediaType = 'none';
   String? _imageDataUrl;
   String? _existingRemoteMediaUrl;
-  String _existingRemoteMediaType = 'photo';
+  String _existingRemoteMediaType = 'image';
   LinkPreviewModel? _linkPreview;
 
   String _bgColor = '#FFDAD6';
@@ -47,7 +53,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   bool _loadingLink = false;
 
   static const List<Map<String, String>> _fontOptions = [
-    {'key': 'sans', 'label': 'FUENTE · RALEWAY'},
+    {'key': 'sans', 'label': 'FUENTE · SANS'},
     {'key': 'serif', 'label': 'FUENTE · SERIF'},
     {'key': 'hand', 'label': 'FUENTE · CALIGRAFÍA'},
     {'key': 'mono', 'label': 'FUENTE · MONO'},
@@ -55,10 +61,15 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
 
   static const List<int> _sizeOptions = [14, 18, 22, 26, 32];
 
+  HomeCardItem? get _targetEditingCard =>
+      widget.editingCard ?? widget.existingCard;
+
   @override
   void initState() {
     super.initState();
-    final card = widget.existingCard;
+    final card = _targetEditingCard;
+    _altTextController = TextEditingController(text: card?.altText ?? '');
+
     if (card != null) {
       _textController.text = card.textContent;
       _bgColor = card.bgColor;
@@ -76,7 +87,8 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       if (card.mediaType == 'link' &&
           card.linkUrl != null &&
           card.linkUrl!.isNotEmpty) {
-        _mediaMode = 'link';
+        _mediaType = 'link';
+        _linkController.text = card.linkUrl!;
         _linkPreview = LinkPreviewModel(
           url: card.linkUrl!,
           title: (card.linkTitle != null && card.linkTitle!.isNotEmpty)
@@ -88,30 +100,40 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       } else if (card.mediaType != 'none' &&
           card.mediaUrl != null &&
           card.mediaUrl!.isNotEmpty) {
-        _mediaMode = 'existing_media';
         _existingRemoteMediaUrl = widget.api.resolveMediaUrl(card.mediaUrl);
-        _existingRemoteMediaType = card.mediaType;
+        _existingRemoteMediaType =
+            card.mediaType == 'drawing' ? 'drawing' : 'image';
+        _mediaType = _existingRemoteMediaType;
       }
+    } else if (widget.initialSharedUrl != null &&
+        widget.initialSharedUrl!.trim().isNotEmpty) {
+      final sharedUrl = widget.initialSharedUrl!.trim();
+      _mediaType = 'link';
+      _linkController.text = sharedUrl;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _fetchLinkPreviewForUrl(sharedUrl);
+      });
     }
   }
 
   @override
   void dispose() {
     _textController.dispose();
+    _altTextController.dispose();
+    _linkController.dispose();
     _drawingController.dispose();
     super.dispose();
   }
 
-  Future<void> _pickCameraOrGallery(ImageSource source) async {
+  Future<void> _pickImage(ImageSource source) async {
     try {
       final XFile? picked = await _picker.pickImage(
         source: source,
-        maxWidth: 1280,
-        maxHeight: 1280,
-        imageQuality: 84,
+        maxWidth: 1440,
+        maxHeight: 1440,
+        imageQuality: 82,
       );
       if (picked == null) {
-        // Si cancela la cámara o galería, se mantiene en 'none' (solo texto)
         return;
       }
       final bytes = await picked.readAsBytes();
@@ -119,19 +141,17 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       if (mounted) {
         setState(() {
           _imageDataUrl = 'data:image/$ext;base64,${base64Encode(bytes)}';
-          _mediaMode = 'photo';
+          _mediaType = 'image';
           _linkPreview = null;
           _existingRemoteMediaUrl = null;
         });
       }
-    } catch (_) {
-      // Si el usuario cancela o no hay cámara disponible, permanece como solo texto
-    }
+    } catch (_) {}
   }
 
   void _openDrawingMode() {
     setState(() {
-      _mediaMode = 'drawing';
+      _mediaType = 'drawing';
       _imageDataUrl = null;
       _linkPreview = null;
       _existingRemoteMediaUrl = null;
@@ -141,52 +161,112 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   void _cancelMediaSelection() {
     _drawingController.clear();
     setState(() {
-      _mediaMode = 'none';
+      _mediaType = 'none';
       _imageDataUrl = null;
       _linkPreview = null;
       _existingRemoteMediaUrl = null;
     });
   }
 
+  Future<void> _fetchLinkPreviewForUrl(String rawUrl) async {
+    final trimmed = rawUrl.trim();
+    if (trimmed.isEmpty) return;
+
+    setState(() {
+      _loadingLink = true;
+      _mediaType = 'link';
+    });
+    try {
+      final preview = await widget.api.fetchLinkPreview(trimmed);
+      if (mounted) {
+        setState(() {
+          _loadingLink = false;
+          _linkPreview = preview;
+          _mediaType = 'link';
+          _imageDataUrl = null;
+          _existingRemoteMediaUrl = null;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loadingLink = false;
+          _linkPreview = LinkPreviewModel(
+            url: trimmed,
+            title: trimmed,
+            platform: 'Web',
+          );
+          _mediaType = 'link';
+          _imageDataUrl = null;
+          _existingRemoteMediaUrl = null;
+        });
+      }
+    }
+  }
+
   Future<void> _openLinkDialog() async {
-    final linkCtrl = TextEditingController();
+    final linkCtrl = TextEditingController(text: _linkController.text);
     final rawUrl = await showDialog<String>(
       context: context,
       builder: (ctx) {
-        final bg = Theme.of(ctx).scaffoldBackgroundColor;
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final bg =
+            isDark ? AmodoroTheme.darkBackground : AmodoroTheme.lightBackground;
+        final boxSurface =
+            isDark ? AmodoroTheme.darkContainer : Colors.white;
+        final ink = isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk;
+        final borderCol =
+            isDark ? const Color(0xFF383232) : const Color(0xFFE9E4DC);
+
         return Dialog(
           backgroundColor: Colors.transparent,
           elevation: 0,
           child: Container(
             padding: const EdgeInsets.all(20),
-            decoration: AmodoroTheme.floatingPerspectiveBox(
+            decoration: AmodoroTheme.cardOutlineBox(
               color: bg,
               radius: 26,
-              thickness: 2.5,
+              borderColor: borderCol,
+              borderWidth: 2.5,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
+                Text(
                   'INSERTAR LINK EMBEBIDO',
-                  style: TextStyle(fontSize: 12, letterSpacing: 1.4),
+                  style: AmodoroTheme.googleSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                    color: ink,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14),
-                  decoration: AmodoroTheme.floatingPerspectiveBox(
-                    color: Theme.of(ctx).colorScheme.surfaceContainer,
+                  decoration: AmodoroTheme.cardOutlineBox(
+                    color: boxSurface,
                     radius: 16,
-                    thickness: 2.0,
+                    borderColor: borderCol,
+                    borderWidth: 1.5,
+                    subtleShadow: false,
                   ),
                   child: TextField(
                     controller: linkCtrl,
                     autofocus: true,
+                    style: AmodoroTheme.googleSans(
+                      fontSize: 13.5,
+                      color: ink,
+                    ),
                     decoration: InputDecoration(
                       border: InputBorder.none,
                       hintText: 'Link de Instagram, YouTube, Spotify...',
-                      icon: AmodoroTheme.sysIcon(Symbols.link, size: 18),
+                      icon: AmodoroTheme.sysIcon(
+                        Symbols.link,
+                        size: 18,
+                        color: ink,
+                      ),
                     ),
                   ),
                 ),
@@ -194,45 +274,48 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: GestureDetector(
+                      child: AmodoroPressableButton(
                         onTap: () => Navigator.pop(ctx, null),
-                        child: Container(
-                          height: 42,
-                          decoration: AmodoroTheme.floatingPerspectiveBox(
-                            color: Theme.of(ctx).colorScheme.surfaceContainer,
-                            radius: 999,
-                            thickness: 2.0,
-                          ),
-                          child: const Center(
-                            child: Text(
-                              'CANCELAR',
-                              style:
-                                  TextStyle(fontSize: 11.5, letterSpacing: 1.2),
-                            ),
+                        height: 44,
+                        radius: 16,
+                        color: boxSurface,
+                        borderColor: borderCol,
+                        borderWidth: 1.5,
+                        lipColor: isDark
+                            ? const Color(0xFF141111)
+                            : const Color(0xFFDFD8CE),
+                        lipHeight: 2.5,
+                        child: Text(
+                          'CANCELAR',
+                          style: AmodoroTheme.googleSans(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.1,
+                            color: ink,
                           ),
                         ),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: GestureDetector(
+                      child: AmodoroPressableButton(
                         onTap: () => Navigator.pop(ctx, linkCtrl.text.trim()),
-                        child: Container(
-                          height: 42,
-                          decoration: AmodoroTheme.floatingPerspectiveBox(
-                            color: AmodoroTheme.coralPillLight,
-                            radius: 999,
-                            thickness: 2.0,
-                          ),
-                          child: const Center(
-                            child: Text(
-                              'AÑADIR LINK',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                letterSpacing: 1.2,
-                                color: AmodoroTheme.coralPillTextLight,
-                              ),
-                            ),
+                        height: 44,
+                        radius: 16,
+                        color: isDark
+                            ? AmodoroTheme.coralPillDark
+                            : AmodoroTheme.coralPillLight,
+                        lipColor: isDark
+                            ? AmodoroTheme.coralPillBorderDark
+                            : AmodoroTheme.coralPillBorderLight,
+                        lipHeight: 2.8,
+                        child: Text(
+                          'AÑADIR LINK',
+                          style: AmodoroTheme.googleSans(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.1,
+                            color: Colors.white,
                           ),
                         ),
                       ),
@@ -247,37 +330,11 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     );
 
     if (rawUrl == null || rawUrl.trim().isEmpty) {
-      // Si cancela el diálogo, permanece en modo 'none' (solo texto)
       return;
     }
 
-    setState(() => _loadingLink = true);
-    try {
-      final preview = await widget.api.fetchLinkPreview(rawUrl.trim());
-      if (mounted) {
-        setState(() {
-          _loadingLink = false;
-          _linkPreview = preview;
-          _mediaMode = 'link';
-          _imageDataUrl = null;
-          _existingRemoteMediaUrl = null;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _loadingLink = false;
-          _linkPreview = LinkPreviewModel(
-            url: rawUrl.trim(),
-            title: rawUrl.trim(),
-            platform: 'Web',
-          );
-          _mediaMode = 'link';
-          _imageDataUrl = null;
-          _existingRemoteMediaUrl = null;
-        });
-      }
-    }
+    _linkController.text = rawUrl.trim();
+    await _fetchLinkPreviewForUrl(rawUrl.trim());
   }
 
   String _sizeKeyFromPx(int px) {
@@ -288,7 +345,10 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   }
 
   Future<void> _submitCard() async {
+    final editingCard = _targetEditingCard;
     final text = _textController.text.trim();
+    final altTextVal = _altTextController.text.trim();
+
     String finalMediaType = 'none';
     String? finalMediaDataUrl;
     String? linkUrl;
@@ -296,15 +356,22 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     String? linkThumbnail;
     String? linkPlatform;
 
-    if (_mediaMode == 'photo' && _imageDataUrl != null) {
-      finalMediaType = 'photo';
+    final keepExisting = editingCard != null &&
+        _existingRemoteMediaUrl != null &&
+        _imageDataUrl == null &&
+        (_mediaType == 'image' || _mediaType == 'drawing');
+
+    if (keepExisting) {
+      finalMediaType = _existingRemoteMediaType;
+    } else if (_mediaType == 'image' && _imageDataUrl != null) {
+      finalMediaType = 'image';
       finalMediaDataUrl = _imageDataUrl;
-    } else if (_mediaMode == 'drawing' && !_drawingController.isEmpty) {
+    } else if (_mediaType == 'drawing' && !_drawingController.isEmpty) {
       finalMediaDataUrl = await _drawingController.toPngDataUrl();
       if (finalMediaDataUrl != null) {
         finalMediaType = 'drawing';
       }
-    } else if (_mediaMode == 'link' && _linkPreview != null) {
+    } else if (_mediaType == 'link' && _linkPreview != null) {
       finalMediaType = 'link';
       linkUrl = _linkPreview!.url;
       linkTitle = _linkPreview!.title;
@@ -312,11 +379,6 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       linkPlatform = _linkPreview!.platform;
     }
 
-    final keepExisting = widget.existingCard != null &&
-        _mediaMode == 'existing_media' &&
-        _existingRemoteMediaUrl != null;
-
-    // Si no eligió ninguna opción (o cerró/canceló el lienzo/foto) y escribió texto, se sube solo texto
     if (!(text.isNotEmpty ||
         finalMediaDataUrl != null ||
         finalMediaType == 'link' ||
@@ -331,11 +393,16 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     }
 
     final fontSizeKey = _sizeKeyFromPx(_fontSizePx);
+    final effectiveAltText =
+        (finalMediaType == 'image' || finalMediaType == 'drawing')
+            ? altTextVal
+            : '';
+
     setState(() => _sending = true);
     try {
-      if (widget.existingCard != null) {
+      if (editingCard != null) {
         await widget.api.updateHomeCard(
-          cardId: widget.existingCard!.id,
+          cardId: editingCard.id,
           textContent: text,
           bgColor: _bgColor,
           fontFamily: _fontFamily,
@@ -344,6 +411,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
           mediaType: keepExisting ? _existingRemoteMediaType : finalMediaType,
           keepExistingMedia: keepExisting,
           mediaDataUrl: finalMediaDataUrl,
+          altText: effectiveAltText,
           linkUrl: finalMediaType == 'link' ? _linkPreview?.url : null,
           linkTitle: finalMediaType == 'link' ? _linkPreview?.title : null,
           linkThumbnail:
@@ -360,6 +428,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
           fontSizePx: _fontSizePx,
           mediaType: finalMediaType,
           mediaDataUrl: finalMediaDataUrl,
+          altText: effectiveAltText,
           linkUrl: linkUrl,
           linkTitle: linkTitle,
           linkThumbnail: linkThumbnail,
@@ -384,12 +453,17 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isEditing = widget.existingCard != null;
-    final cardColor = AmodoroTheme.parseHexColor(_bgColor);
-    final cardInk = AmodoroTheme.getContrastingInk(cardColor);
-    final cardMuted = AmodoroTheme.getContrastingMutedInk(cardColor);
+    final isEditing = _targetEditingCard != null;
+    final selectedBgColor = AmodoroTheme.parseHexColor(_bgColor);
+    final cardInk = AmodoroTheme.getContrastingInk(selectedBgColor);
+    final cardMuted = AmodoroTheme.getContrastingMutedInk(selectedBgColor);
     final capsuleSurface =
-        isDark ? const Color(0xFF1F2421) : const Color(0xFFF4EFE8);
+        isDark ? AmodoroTheme.darkContainer : const Color(0xFFF6EFE6);
+    final capsuleBorder =
+        isDark ? const Color(0xFF3A3333) : const Color(0xFFE5DEC9);
+    final capsuleLip =
+        isDark ? const Color(0xFF141111) : const Color(0xFFE0D4C3);
+    final screenInk = isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk;
 
     return Scaffold(
       body: SafeArea(
@@ -398,57 +472,105 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Cápsula superior con X (como en el boceto)
-              Center(
-                child: GestureDetector(
-                  onTap: () => Navigator.of(context).pop(false),
-                  child: Container(
-                    width: 120,
-                    height: 38,
-                    decoration: AmodoroTheme.floatingPerspectiveBox(
-                      color: capsuleSurface,
-                      radius: 999,
-                      thickness: 2.5,
-                    ),
-                    child: Center(
-                      child: AmodoroTheme.sysIcon(
-                        Symbols.close,
-                        size: 20,
-                      ),
+              // Top Back / Close Pressable Button
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  AmodoroPressableButton(
+                    onTap: () => Navigator.of(context).pop(false),
+                    width: 44,
+                    height: 40,
+                    radius: 14,
+                    color: capsuleSurface,
+                    borderColor: capsuleBorder,
+                    borderWidth: 1.5,
+                    lipColor: capsuleLip,
+                    lipHeight: 2.8,
+                    child: AmodoroTheme.sysIcon(
+                      Symbols.arrow_back,
+                      size: 20,
+                      color: screenInk,
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Center(
-                child: Text(
-                  isEditing ? 'EDITAR TARJETA' : 'NUEVA TARJETA',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    letterSpacing: 1.5,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  Text(
+                    isEditing ? 'EDITAR TARJETA' : 'NUEVA TARJETA',
+                    style: AmodoroTheme.googleSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.4,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 44),
+                ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
-              // Tarjeta principal donde se elige la opción superior y se edita el texto directamente sobre ella
+              // Main Card Preview Container: Border-only (NO 3D bottom lip)
               Container(
                 padding: const EdgeInsets.all(20),
-                decoration: AmodoroTheme.floatingPerspectiveBox(
-                  color: cardColor,
-                  radius: 30,
-                  thickness: 3.0,
+                decoration: AmodoroTheme.cardOutlineBox(
+                  color: selectedBgColor,
+                  radius: 32,
+                  borderColor: AmodoroTheme.darkenForPerspective(
+                    selectedBgColor,
+                    0.12,
+                  ),
+                  borderWidth: 3.0,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Parte superior de la tarjeta: Cuadrícula 2x2 de 4 opciones (o el medio elegido con X para cancelar)
-                    _buildTopMediaSection(cardColor, cardInk),
+                    // Top Media Section (2x2 Pressable Grid or Selected Media)
+                    _buildTopMediaSection(selectedBgColor, cardInk),
+
+                    // Optional Alt Text / Image Note when _mediaType == 'image' || _mediaType == 'drawing'
+                    if (_mediaType == 'image' || _mediaType == 'drawing') ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 2,
+                        ),
+                        decoration: AmodoroTheme.cardOutlineBox(
+                          color: Colors.white.withValues(alpha: 0.65),
+                          radius: 16,
+                          borderColor: AmodoroTheme.darkenForPerspective(
+                            selectedBgColor,
+                            0.14,
+                          ),
+                          borderWidth: 1.5,
+                          subtleShadow: false,
+                        ),
+                        child: TextField(
+                          controller: _altTextController,
+                          maxLines: 2,
+                          minLines: 1,
+                          style: AmodoroTheme.googleSans(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: AmodoroTheme.lightInk,
+                          ),
+                          decoration: InputDecoration(
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding:
+                                const EdgeInsets.symmetric(vertical: 10),
+                            hintText:
+                                'Nota o descripción de la imagen (opcional)...',
+                            hintStyle: AmodoroTheme.googleSans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AmodoroTheme.lightMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
 
                     const SizedBox(height: 18),
 
-                    // Edición de texto directamente sobre la misma tarjeta ("ESCRIBE AQUÍ")
+                    // Direct text editor inside the card
                     TextField(
                       controller: _textController,
                       maxLines: null,
@@ -473,57 +595,62 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Fila inferior de 3 menús desplegables en cápsulas: FUENTE | 18 PX | COLOR
+              // 3 Typography Dropdown Capsules using AmodoroPressableButton
               Row(
                 children: [
                   Expanded(
                     flex: 5,
-                    child: _buildFontDropdownCapsule(capsuleSurface),
+                    child: _buildFontDropdownCapsule(
+                      capsuleSurface,
+                      capsuleBorder,
+                      capsuleLip,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     flex: 3,
-                    child: _buildSizeDropdownCapsule(capsuleSurface),
+                    child: _buildSizeDropdownCapsule(
+                      capsuleSurface,
+                      capsuleBorder,
+                      capsuleLip,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     flex: 4,
-                    child: _buildColorDropdownCapsule(capsuleSurface),
+                    child: _buildColorDropdownCapsule(
+                      capsuleSurface,
+                      capsuleBorder,
+                      capsuleLip,
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 18),
 
-              // Botón principal en MAYÚSCULAS con borde en perspectiva
-              GestureDetector(
+              // Bottom Submit Button using AmodoroPressableButton
+              AmodoroPressableButton(
                 onTap: _sending ? null : _submitCard,
-                child: Container(
-                  height: 50,
-                  decoration: AmodoroTheme.floatingPerspectiveBox(
-                    color: isDark
-                        ? AmodoroTheme.coralPillDark
-                        : AmodoroTheme.coralPillLight,
-                    radius: 999,
-                    thickness: 2.5,
-                    perspectiveEdgeColor: isDark
-                        ? AmodoroTheme.coralPillBorderDark
-                        : AmodoroTheme.coralPillBorderLight,
-                  ),
-                  child: Center(
-                    child: Text(
-                      isEditing
-                          ? (_sending ? 'GUARDANDO...' : 'GUARDAR CAMBIOS')
-                          : (_sending
-                              ? 'PUBLICANDO...'
-                              : 'ENVIAR A ${widget.partnerNickname.toUpperCase()}'),
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        letterSpacing: 1.5,
-                        color: isDark
-                            ? AmodoroTheme.coralPillTextDark
-                            : AmodoroTheme.coralPillTextLight,
-                      ),
-                    ),
+                height: 52,
+                radius: 18,
+                color: isDark
+                    ? AmodoroTheme.coralPillDark
+                    : AmodoroTheme.coralPillLight,
+                lipColor: isDark
+                    ? AmodoroTheme.coralPillBorderDark
+                    : AmodoroTheme.coralPillBorderLight,
+                lipHeight: 4.0,
+                child: Text(
+                  isEditing
+                      ? (_sending ? 'GUARDANDO...' : 'GUARDAR CAMBIOS')
+                      : (_sending
+                          ? 'PUBLICANDO...'
+                          : 'ENVIAR A ${widget.partnerNickname.toUpperCase()}'),
+                  style: AmodoroTheme.googleSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
+                    color: Colors.white,
                   ),
                 ),
               ),
@@ -569,41 +696,61 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     final canvasInk = isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk;
     final canvasEdge = AmodoroTheme.darkenForPerspective(
       canvasTileColor,
-      isDark ? 0.14 : 0.18,
+      isDark ? 0.14 : 0.16,
+    );
+    final containerBorder = AmodoroTheme.darkenForPerspective(
+      cardColor,
+      0.14,
     );
 
     if (_loadingLink) {
       return AspectRatio(
         aspectRatio: 1.0,
         child: Container(
-          decoration: AmodoroTheme.floatingPerspectiveBox(
+          decoration: AmodoroTheme.cardOutlineBox(
             color: canvasOuterColor,
             radius: 24,
-            thickness: 2.5,
-            perspectiveEdgeColor: canvasEdge,
+            borderColor: containerBorder,
+            borderWidth: 2.0,
+            subtleShadow: false,
           ),
           child: Center(
             child: Text(
               'CARGANDO VISTA PREVIA DEL LINK...',
               textAlign: TextAlign.center,
-              style: TextStyle(color: canvasInk),
+              style: AmodoroTheme.googleSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: canvasInk,
+              ),
             ),
           ),
         ),
       );
     }
 
-    if (_mediaMode == 'existing_media' && _existingRemoteMediaUrl != null) {
+    if (_existingRemoteMediaUrl != null &&
+        _imageDataUrl == null &&
+        (_mediaType == 'image' || _mediaType == 'drawing')) {
       return AspectRatio(
         aspectRatio: 1.0,
         child: Stack(
           fit: StackFit.expand,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(22),
-              child: Container(
-                color: canvasOuterColor,
-                child: _buildExistingMediaPreview(_existingRemoteMediaUrl!),
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.65),
+                  width: 2.0,
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Container(
+                  color: canvasOuterColor,
+                  child: _buildExistingMediaPreview(_existingRemoteMediaUrl!),
+                ),
               ),
             ),
             Positioned(
@@ -616,7 +763,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       );
     }
 
-    if (_mediaMode == 'photo' && _imageDataUrl != null) {
+    if (_mediaType == 'image' && _imageDataUrl != null) {
       final comma = _imageDataUrl!.indexOf(',');
       final bytes = base64Decode(_imageDataUrl!.substring(comma + 1));
       return AspectRatio(
@@ -624,13 +771,22 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(22),
-              child: Image.memory(
-                bytes,
-                width: double.infinity,
-                height: double.infinity,
-                fit: BoxFit.cover,
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.65),
+                  width: 2.0,
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Image.memory(
+                  bytes,
+                  width: double.infinity,
+                  height: double.infinity,
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
             Positioned(
@@ -643,14 +799,15 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       );
     }
 
-    if (_mediaMode == 'drawing') {
+    if (_mediaType == 'drawing') {
       return Container(
         padding: const EdgeInsets.all(12),
-        decoration: AmodoroTheme.floatingPerspectiveBox(
+        decoration: AmodoroTheme.cardOutlineBox(
           color: canvasOuterColor,
           radius: 24,
-          thickness: 2.5,
-          perspectiveEdgeColor: canvasEdge,
+          borderColor: containerBorder,
+          borderWidth: 2.0,
+          subtleShadow: false,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -660,8 +817,9 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
               children: [
                 Text(
                   'LIENZO DE DIBUJO',
-                  style: TextStyle(
+                  style: AmodoroTheme.googleSans(
                     fontSize: 11,
+                    fontWeight: FontWeight.w800,
                     letterSpacing: 1.2,
                     color: canvasInk,
                   ),
@@ -676,7 +834,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       );
     }
 
-    if (_mediaMode == 'link' && _linkPreview != null) {
+    if (_mediaType == 'link' && _linkPreview != null) {
       return LinkPreviewCard(
         url: _linkPreview!.url,
         title: _linkPreview!.title,
@@ -688,16 +846,17 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       );
     }
 
-    // Por defecto: Cuadrícula 2x2 cuadrada (1:1) con colores basados en el fondo de la app
+    // Default 2x2 media selector grid inside a border-only container
     return AspectRatio(
       aspectRatio: 1.0,
       child: Container(
         padding: const EdgeInsets.all(14),
-        decoration: AmodoroTheme.floatingPerspectiveBox(
+        decoration: AmodoroTheme.cardOutlineBox(
           color: canvasOuterColor,
           radius: 26,
-          thickness: 2.5,
-          perspectiveEdgeColor: canvasEdge,
+          borderColor: containerBorder,
+          borderWidth: 2.0,
+          subtleShadow: false,
         ),
         child: Column(
           children: [
@@ -712,7 +871,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                       tileColor: canvasTileColor,
                       edgeColor: canvasEdge,
                       inkColor: canvasInk,
-                      onTap: () => _pickCameraOrGallery(ImageSource.camera),
+                      onTap: () => _pickImage(ImageSource.camera),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -723,7 +882,7 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
                       tileColor: canvasTileColor,
                       edgeColor: canvasEdge,
                       inkColor: canvasInk,
-                      onTap: () => _pickCameraOrGallery(ImageSource.gallery),
+                      onTap: () => _pickImage(ImageSource.gallery),
                     ),
                   ),
                 ],
@@ -772,213 +931,424 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     required Color inkColor,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
+    return AmodoroPressableButton(
       onTap: onTap,
-      child: Container(
-        decoration: AmodoroTheme.floatingPerspectiveBox(
-          color: tileColor,
-          radius: 20,
-          thickness: 2.5,
-          perspectiveEdgeColor: edgeColor,
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            AmodoroTheme.sysIcon(icon, size: 28, color: inkColor),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11.5,
-                letterSpacing: 1.3,
-                color: inkColor,
-              ),
+      color: tileColor,
+      borderColor: edgeColor.withValues(alpha: 0.45),
+      borderWidth: 1.5,
+      lipColor: edgeColor,
+      lipHeight: 3.2,
+      radius: 20,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          AmodoroTheme.sysIcon(icon, size: 28, color: inkColor),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: AmodoroTheme.googleSans(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+              color: inkColor,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildCancelMediaChip() {
-    return GestureDetector(
+    return AmodoroPressableButton(
       onTap: _cancelMediaSelection,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: AmodoroTheme.floatingPerspectiveBox(
-          color: const Color(0xFFFCF9F5),
-          radius: 999,
-          thickness: 2.0,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AmodoroTheme.sysIcon(
-              Symbols.close,
-              size: 15,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      color: const Color(0xFFFCF9F5),
+      borderColor: const Color(0xFFE5DEC9),
+      borderWidth: 1.5,
+      lipColor: const Color(0xFFD8CCB8),
+      lipHeight: 2.2,
+      radius: 999,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AmodoroTheme.sysIcon(
+            Symbols.close,
+            size: 15,
+            color: const Color(0xFF1F1B18),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'SOLO TEXTO',
+            style: AmodoroTheme.googleSans(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.0,
               color: const Color(0xFF1F1B18),
             ),
-            const SizedBox(width: 4),
-            const Text(
-              'SOLO TEXTO',
-              style: TextStyle(
-                fontSize: 10,
-                letterSpacing: 1.0,
-                color: Color(0xFF1F1B18),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showFontPicker() async {
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final surface =
+            isDark ? AmodoroTheme.darkBackground : AmodoroTheme.lightBackground;
+        final ink = isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk;
+        final borderCol =
+            isDark ? const Color(0xFF383232) : const Color(0xFFE9E4DC);
+
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: AmodoroTheme.cardOutlineBox(
+                color: surface,
+                radius: 28,
+                borderColor: borderCol,
+                borderWidth: 2.5,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: _fontOptions.map((opt) {
+                  final key = opt['key']!;
+                  final selected = key == _fontFamily;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: AmodoroPressableButton(
+                      onTap: () => Navigator.of(ctx).pop(key),
+                      height: 44,
+                      radius: 14,
+                      color: selected
+                          ? (isDark
+                              ? AmodoroTheme.coralPillDark
+                              : AmodoroTheme.coralPillLight)
+                          : (isDark
+                              ? AmodoroTheme.darkContainer
+                              : Colors.white),
+                      borderColor: selected ? null : borderCol,
+                      borderWidth: selected ? 0.0 : 1.5,
+                      lipColor: selected
+                          ? (isDark
+                              ? AmodoroTheme.coralPillBorderDark
+                              : AmodoroTheme.coralPillBorderLight)
+                          : (isDark
+                              ? const Color(0xFF141111)
+                              : const Color(0xFFDFD8CE)),
+                      lipHeight: 2.5,
+                      child: Text(
+                        opt['label']!,
+                        style: AmodoroTheme.googleSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.0,
+                          color: selected ? Colors.white : ink,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFontDropdownCapsule(Color surface) {
-    return Container(
-      constraints: const BoxConstraints(minHeight: 40),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      decoration: AmodoroTheme.floatingPerspectiveBox(
-        color: surface,
-        radius: 999,
-        thickness: 2.5,
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _fontFamily,
-          isExpanded: true,
-          icon: AmodoroTheme.sysIcon(Symbols.expand_more, size: 18),
-          style: TextStyle(
-            fontSize: 11,
-            letterSpacing: 1.0,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
-          items: _fontOptions.map((opt) {
-            return DropdownMenuItem<String>(
-              value: opt['key'],
-              child: Text(
-                opt['label']!,
-                overflow: TextOverflow.ellipsis,
-              ),
-            );
-          }).toList(),
-          onChanged: (v) {
-            if (v != null) setState(() => _fontFamily = v);
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSizeDropdownCapsule(Color surface) {
-    return Container(
-      constraints: const BoxConstraints(minHeight: 40),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-      decoration: AmodoroTheme.floatingPerspectiveBox(
-        color: surface,
-        radius: 999,
-        thickness: 2.5,
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<int>(
-          value: _fontSizePx,
-          isExpanded: true,
-          icon: AmodoroTheme.sysIcon(Symbols.expand_more, size: 18),
-          style: TextStyle(
-            fontSize: 11,
-            letterSpacing: 1.0,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
-          items: _sizeOptions.map((px) {
-            return DropdownMenuItem<int>(
-              value: px,
-              child: Text('$px PX'),
-            );
-          }).toList(),
-          onChanged: (v) {
-            if (v != null) setState(() => _fontSizePx = v);
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildColorDropdownCapsule(Color surface) {
-    final hasPreset = AmodoroTheme.pastelPresets.any((p) => p.hex == _bgColor);
-    final items = <DropdownMenuItem<String>>[
-      if (!hasPreset)
-        DropdownMenuItem<String>(
-          value: _bgColor,
-          child: Row(
-            children: [
-              Container(
-                width: 14,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: AmodoroTheme.parseHexColor(_bgColor),
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 6),
-              const Expanded(
-                child: Text(
-                  'ACTUAL',
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 10.5),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ...AmodoroTheme.pastelPresets.map((preset) {
-        return DropdownMenuItem<String>(
-          value: preset.hex,
-          child: Row(
-            children: [
-              Container(
-                width: 14,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: preset.color,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  preset.name.toUpperCase(),
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10.5),
-                ),
-              ),
-            ],
           ),
         );
-      }),
-    ];
+      },
+    );
+    if (chosen != null && mounted) {
+      setState(() => _fontFamily = chosen);
+    }
+  }
 
-    return Container(
-      constraints: const BoxConstraints(minHeight: 40),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-      decoration: AmodoroTheme.floatingPerspectiveBox(
-        color: surface,
-        radius: 999,
-        thickness: 2.5,
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _bgColor,
-          isExpanded: true,
-          icon: AmodoroTheme.sysIcon(Symbols.expand_more, size: 18),
-          style: TextStyle(
-            fontSize: 11,
-            letterSpacing: 1.0,
-            color: Theme.of(context).colorScheme.onSurface,
+  Future<void> _showSizePicker() async {
+    final chosen = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final surface =
+            isDark ? AmodoroTheme.darkBackground : AmodoroTheme.lightBackground;
+        final ink = isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk;
+        final borderCol =
+            isDark ? const Color(0xFF383232) : const Color(0xFFE9E4DC);
+
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: AmodoroTheme.cardOutlineBox(
+                color: surface,
+                radius: 28,
+                borderColor: borderCol,
+                borderWidth: 2.5,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: _sizeOptions.map((px) {
+                  final selected = px == _fontSizePx;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: AmodoroPressableButton(
+                      onTap: () => Navigator.of(ctx).pop(px),
+                      height: 44,
+                      radius: 14,
+                      color: selected
+                          ? (isDark
+                              ? AmodoroTheme.coralPillDark
+                              : AmodoroTheme.coralPillLight)
+                          : (isDark
+                              ? AmodoroTheme.darkContainer
+                              : Colors.white),
+                      borderColor: selected ? null : borderCol,
+                      borderWidth: selected ? 0.0 : 1.5,
+                      lipColor: selected
+                          ? (isDark
+                              ? AmodoroTheme.coralPillBorderDark
+                              : AmodoroTheme.coralPillBorderLight)
+                          : (isDark
+                              ? const Color(0xFF141111)
+                              : const Color(0xFFDFD8CE)),
+                      lipHeight: 2.5,
+                      child: Text(
+                        '$px PX',
+                        style: AmodoroTheme.googleSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.0,
+                          color: selected ? Colors.white : ink,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
           ),
-          items: items,
-          onChanged: (v) {
-            if (v != null) setState(() => _bgColor = v);
-          },
-        ),
+        );
+      },
+    );
+    if (chosen != null && mounted) {
+      setState(() => _fontSizePx = chosen);
+    }
+  }
+
+  Future<void> _showColorPicker() async {
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final surface =
+            isDark ? AmodoroTheme.darkBackground : AmodoroTheme.lightBackground;
+        final ink = isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk;
+        final borderCol =
+            isDark ? const Color(0xFF383232) : const Color(0xFFE9E4DC);
+
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: AmodoroTheme.cardOutlineBox(
+                color: surface,
+                radius: 28,
+                borderColor: borderCol,
+                borderWidth: 2.5,
+              ),
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: AmodoroTheme.pastelPresets.map((preset) {
+                  final selected =
+                      preset.hex.toUpperCase() == _bgColor.toUpperCase();
+                  return AmodoroPressableButton(
+                    onTap: () => Navigator.of(ctx).pop(preset.hex),
+                    height: 42,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    radius: 14,
+                    color: preset.color,
+                    borderColor: selected
+                        ? AmodoroTheme.coralPillLight
+                        : AmodoroTheme.darkenForPerspective(preset.color, 0.14),
+                    borderWidth: selected ? 2.5 : 1.5,
+                    lipColor: AmodoroTheme.darkenForPerspective(
+                      preset.color,
+                      0.18,
+                    ),
+                    lipHeight: 2.8,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          preset.name.toUpperCase(),
+                          style: AmodoroTheme.googleSans(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                            color: ink,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (chosen != null && mounted) {
+      setState(() => _bgColor = chosen);
+    }
+  }
+
+  Widget _buildFontDropdownCapsule(
+    Color surface,
+    Color borderCol,
+    Color lipCol,
+  ) {
+    final currentLabel = _fontOptions.firstWhere(
+      (o) => o['key'] == _fontFamily,
+      orElse: () => _fontOptions.first,
+    )['label']!;
+    final ink = Theme.of(context).colorScheme.onSurface;
+
+    return AmodoroPressableButton(
+      onTap: _showFontPicker,
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      color: surface,
+      borderColor: borderCol,
+      borderWidth: 1.5,
+      lipColor: lipCol,
+      lipHeight: 2.8,
+      radius: 16,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              currentLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AmodoroTheme.googleSans(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+                color: ink,
+              ),
+            ),
+          ),
+          AmodoroTheme.sysIcon(Symbols.expand_more, size: 18, color: ink),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSizeDropdownCapsule(
+    Color surface,
+    Color borderCol,
+    Color lipCol,
+  ) {
+    final ink = Theme.of(context).colorScheme.onSurface;
+
+    return AmodoroPressableButton(
+      onTap: _showSizePicker,
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      color: surface,
+      borderColor: borderCol,
+      borderWidth: 1.5,
+      lipColor: lipCol,
+      lipHeight: 2.8,
+      radius: 16,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              '$_fontSizePx PX',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AmodoroTheme.googleSans(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+                color: ink,
+              ),
+            ),
+          ),
+          AmodoroTheme.sysIcon(Symbols.expand_more, size: 18, color: ink),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildColorDropdownCapsule(
+    Color surface,
+    Color borderCol,
+    Color lipCol,
+  ) {
+    final preset = AmodoroTheme.pastelPresets.firstWhere(
+      (p) => p.hex.toUpperCase() == _bgColor.toUpperCase(),
+      orElse: () => PastelPreset(
+        id: 'custom',
+        name: 'COLOR',
+        hex: _bgColor,
+        color: AmodoroTheme.parseHexColor(_bgColor),
+      ),
+    );
+    final ink = Theme.of(context).colorScheme.onSurface;
+
+    return AmodoroPressableButton(
+      onTap: _showColorPicker,
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      color: surface,
+      borderColor: borderCol,
+      borderWidth: 1.5,
+      lipColor: lipCol,
+      lipHeight: 2.8,
+      radius: 16,
+      child: Row(
+        children: [
+          Container(
+            width: 14,
+            height: 14,
+            decoration: BoxDecoration(
+              color: preset.color,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: AmodoroTheme.darkenForPerspective(preset.color, 0.16),
+                width: 1.2,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              preset.name.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AmodoroTheme.googleSans(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+                color: ink,
+              ),
+            ),
+          ),
+          AmodoroTheme.sysIcon(Symbols.expand_more, size: 18, color: ink),
+        ],
       ),
     );
   }

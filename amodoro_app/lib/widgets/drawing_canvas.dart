@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../theme/amodoro_theme.dart';
+import 'pressable_button.dart';
 
 class DrawingStroke {
   final List<Offset> points;
@@ -139,83 +140,123 @@ class InteractiveDrawingPad extends StatelessWidget {
               children: [
                 ..._palette.map((c) {
                   final selected = controller.currentColor == c;
-                  return GestureDetector(
+                  return AmodoroPressableButton(
                     onTap: () => controller.setColor(c),
-                    child: Container(
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(
-                        color: c,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: selected
-                                ? AmodoroTheme.coralPillLight
-                                : Colors.black26,
-                            offset: const Offset(2, 2),
-                            blurRadius: 0,
-                            spreadRadius: 0,
-                          ),
-                        ],
-                      ),
-                    ),
+                    color: c,
+                    lipColor: AmodoroTheme.darkenForPerspective(c, 0.22),
+                    lipHeight: 2.5,
+                    radius: 999,
+                    width: 44,
+                    height: 44,
+                    borderColor: selected
+                        ? (isDark ? Colors.white : AmodoroTheme.lightInk)
+                        : null,
+                    borderWidth: selected ? 2.5 : 0.0,
+                    child: selected
+                        ? Icon(
+                            Symbols.check,
+                            size: 20,
+                            color: c.computeLuminance() > 0.4
+                                ? Colors.black
+                                : Colors.white,
+                          )
+                        : const SizedBox.shrink(),
                   );
                 }),
                 const SizedBox(width: 4),
                 ..._widths.map((w) {
                   final selected = controller.currentWidth == w;
-                  return GestureDetector(
+                  return AmodoroPressableButton(
                     onTap: () => controller.setStrokeWidth(w),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: AmodoroTheme.floatingPerspectiveBox(
-                        color: selected
-                            ? AmodoroTheme.coralPillLight
-                            : (isDark
-                                  ? AmodoroTheme.darkContainer
-                                  : AmodoroTheme.lightContainer),
-                        radius: 999,
-                        thickness: 2.0,
-                      ),
+                    color: selected
+                        ? AmodoroTheme.coralPillLight
+                        : (isDark
+                            ? AmodoroTheme.darkContainer
+                            : AmodoroTheme.lightContainer),
+                    lipColor: selected
+                        ? AmodoroTheme.coralPillBorderLight
+                        : (isDark
+                            ? const Color(0xFF181515)
+                            : const Color(0xFFDDD5C8)),
+                    lipHeight: 2.5,
+                    radius: 999,
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Center(
                       child: Text(
                         '${w.toInt()}PX',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w400,
+                        style: AmodoroTheme.googleSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
                           color: selected
-                              ? AmodoroTheme.coralText(isDark)
-                              : (isDark ? Colors.white : Colors.black87),
+                              ? Colors.white
+                              : (isDark ? Colors.white : AmodoroTheme.lightInk),
                         ),
                       ),
                     ),
                   );
                 }),
-                IconButton(
-                  tooltip: 'Deshacer trazo',
-                  onPressed: controller.undo,
-                  icon: AmodoroTheme.sysIcon(Symbols.undo, size: 18),
+                AmodoroPressableButton(
+                  onTap: controller.strokes.isNotEmpty ? controller.undo : null,
+                  color: isDark
+                      ? AmodoroTheme.darkContainer
+                      : AmodoroTheme.lightContainer,
+                  lipColor: isDark
+                      ? const Color(0xFF181515)
+                      : const Color(0xFFDDD5C8),
+                  lipHeight: 2.5,
+                  radius: 999,
+                  width: 44,
+                  height: 44,
+                  child: Center(
+                    child: AmodoroTheme.sysIcon(
+                      Symbols.undo,
+                      size: 20,
+                      color: controller.strokes.isNotEmpty
+                          ? (isDark ? Colors.white : AmodoroTheme.lightInk)
+                          : (isDark ? Colors.white38 : Colors.black26),
+                    ),
+                  ),
                 ),
-                IconButton(
-                  tooltip: 'Limpiar lienzo',
-                  onPressed: controller.clear,
-                  icon: AmodoroTheme.sysIcon(Symbols.delete, size: 18),
+                AmodoroPressableButton(
+                  onTap: controller.strokes.isNotEmpty ? controller.clear : null,
+                  color: isDark
+                      ? AmodoroTheme.darkContainer
+                      : AmodoroTheme.lightContainer,
+                  lipColor: isDark
+                      ? const Color(0xFF181515)
+                      : const Color(0xFFDDD5C8),
+                  lipHeight: 2.5,
+                  radius: 999,
+                  width: 44,
+                  height: 44,
+                  child: Center(
+                    child: AmodoroTheme.sysIcon(
+                      Symbols.delete,
+                      size: 20,
+                      color: controller.strokes.isNotEmpty
+                          ? (isDark ? Colors.white : AmodoroTheme.lightInk)
+                          : (isDark ? Colors.white38 : Colors.black26),
+                    ),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             AspectRatio(
               aspectRatio: 1.0,
               child: Container(
-                decoration: AmodoroTheme.floatingPerspectiveBox(
+                decoration: AmodoroTheme.cardOutlineBox(
                   color: const Color(0xFFFFFDF9),
                   radius: 22,
-                  thickness: 2.5,
+                  borderColor: isDark
+                      ? const Color(0xFF383232)
+                      : const Color(0xFFDDD5C8),
+                  borderWidth: 2.5,
+                  subtleShadow: false,
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(21),
+                  borderRadius: BorderRadius.circular(20),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final scaleX = 600.0 / constraints.maxWidth;

@@ -1,14 +1,19 @@
 import { CORS_HEADERS, getApiUser, jsonResponse } from "@/lib/api-auth";
 import {
   addBoardItem,
+  completeBoardItem,
   copyItemToActividades,
   createCustomBoard,
   deleteBoard,
-  deleteOrCompleteBoardItem,
+  deleteBoardItem,
+  reactToBoardItem,
+  reorderBoardItems,
+  reorderBoards,
   updateBoard,
   updateBoardItem,
 } from "@/lib/boards";
 import { fetchLinkPreview } from "@/lib/link-preview";
+import { sendPushToPartner } from "@/lib/push";
 import { storeBase64Media } from "../home/route";
 
 export async function OPTIONS() {
@@ -31,18 +36,29 @@ export async function POST(request: Request) {
         | "update_item"
         | "delete_item"
         | "copy_to_actividades"
-        | "complete_item";
+        | "complete_item"
+        | "react_item"
+        | "reorder_boards"
+        | "reorder_items";
       title?: string;
       icon?: string;
       bgColor?: string;
       boardId?: number | string;
+      boardIds?: (number | string)[];
+      itemIds?: (number | string)[];
       categoryTag?: string;
       notes?: string;
+      dueDate?: string | null;
       url?: string;
       linkUrl?: string;
-      emoji?: string;
-      imageBase64?: string;
-      mediaDataUrl?: string;
+      emoji?: string | null;
+      presetText?: string | null;
+      imageBase64?: string | null;
+      mediaDataUrl?: string | null;
+      mediaKind?: "image" | "drawing";
+      mediaId?: number | null;
+      completionText?: string | null;
+      message?: string | null;
       itemId?: number | string;
     };
 
@@ -50,7 +66,7 @@ export async function POST(request: Request) {
       const board = createCustomBoard({
         title: payload.title ?? "",
         icon: payload.icon ?? "bookmark",
-        bgColor: payload.bgColor ?? "#F4EFE8",
+        bgColor: payload.bgColor ?? "#F27166",
         userId: user.id,
       });
       return jsonResponse({ ok: true, board });
@@ -71,6 +87,16 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: true });
     }
 
+    if (payload.action === "reorder_boards") {
+      reorderBoards(payload.boardIds ?? []);
+      return jsonResponse({ ok: true });
+    }
+
+    if (payload.action === "reorder_items") {
+      reorderBoardItems(payload.itemIds ?? []);
+      return jsonResponse({ ok: true });
+    }
+
     if (payload.action === "add_item") {
       const rawBase64 =
         payload.imageBase64?.trim() || payload.mediaDataUrl?.trim() || "";
@@ -78,7 +104,7 @@ export async function POST(request: Request) {
       if (rawBase64) {
         mediaId = await storeBase64Media({
           base64: rawBase64,
-          kind: "image",
+          kind: payload.mediaKind ?? "image",
           ownerId: user.id,
         });
       }
@@ -104,9 +130,10 @@ export async function POST(request: Request) {
         linkTitle,
         linkThumbnail,
         linkPlatform,
-        emoji: payload.emoji,
+        emoji: payload.emoji ?? undefined,
         bgColor: payload.bgColor ?? "#FFDAD6",
         mediaId,
+        dueDate: payload.dueDate,
         userId: user.id,
       });
       return jsonResponse({ ok: true, item });
@@ -119,8 +146,9 @@ export async function POST(request: Request) {
         notes: payload.notes,
         categoryTag: payload.categoryTag,
         bgColor: payload.bgColor,
-        emoji: payload.emoji,
+        emoji: payload.emoji ?? undefined,
         url: payload.url ?? payload.linkUrl,
+        dueDate: payload.dueDate,
       });
       return jsonResponse({ ok: true });
     }
@@ -130,12 +158,50 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: true, item: copied });
     }
 
-    if (
-      payload.action === "complete_item" ||
-      payload.action === "delete_item"
-    ) {
-      deleteOrCompleteBoardItem(Number(payload.itemId));
+    if (payload.action === "complete_item") {
+      const rawBase64 =
+        payload.imageBase64?.trim() || payload.mediaDataUrl?.trim() || "";
+      let completionMediaId: number | null = payload.mediaId ?? null;
+      if (rawBase64) {
+        completionMediaId = await storeBase64Media({
+          base64: rawBase64,
+          kind: payload.mediaKind ?? "image",
+          ownerId: user.id,
+        });
+      }
+
+      const completionText =
+        payload.completionText ?? payload.message ?? payload.notes ?? null;
+
+      const completed = completeBoardItem({
+        itemId: Number(payload.itemId),
+        userId: user.id,
+        completionText,
+        completionMediaId,
+      });
+
+      void sendPushToPartner(user.id, {
+        title: "¡Actividad completada! ✨",
+        body: completed.title,
+        data: { type: "completed_item", itemId: String(completed.id) },
+      });
+
+      return jsonResponse({ ok: true, item: completed });
+    }
+
+    if (payload.action === "delete_item") {
+      deleteBoardItem(Number(payload.itemId));
       return jsonResponse({ ok: true });
+    }
+
+    if (payload.action === "react_item") {
+      const res = reactToBoardItem({
+        itemId: Number(payload.itemId),
+        userId: user.id,
+        emoji: payload.emoji ?? null,
+        presetText: payload.presetText ?? null,
+      });
+      return jsonResponse({ ok: true, removed: res.removed });
     }
 
     return jsonResponse({ ok: false, error: "Acción desconocida" }, 400);

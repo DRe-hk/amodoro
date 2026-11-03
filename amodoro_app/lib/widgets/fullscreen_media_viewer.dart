@@ -2,8 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../theme/amodoro_theme.dart';
+import 'pressable_button.dart';
 
-class FullscreenMediaViewer extends StatelessWidget {
+class FullscreenMediaViewer extends StatefulWidget {
   final String imageUrl;
   final String? heroTag;
 
@@ -34,12 +35,35 @@ class FullscreenMediaViewer extends StatelessWidget {
     );
   }
 
+  @override
+  State<FullscreenMediaViewer> createState() => _FullscreenMediaViewerState();
+}
+
+class _FullscreenMediaViewerState extends State<FullscreenMediaViewer> {
+  late final TransformationController _transformationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _transformationController = TransformationController();
+  }
+
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
+  }
+
+  void _resetZoom() {
+    _transformationController.value = Matrix4.identity();
+  }
+
   Widget _buildImageContent() {
-    if (imageUrl.startsWith('data:image/')) {
-      final comma = imageUrl.indexOf(',');
+    if (widget.imageUrl.startsWith('data:image/')) {
+      final comma = widget.imageUrl.indexOf(',');
       if (comma != -1) {
         try {
-          final bytes = base64Decode(imageUrl.substring(comma + 1));
+          final bytes = base64Decode(widget.imageUrl.substring(comma + 1));
           return Image.memory(
             bytes,
             fit: BoxFit.contain,
@@ -48,7 +72,7 @@ class FullscreenMediaViewer extends StatelessWidget {
       }
     }
     return Image.network(
-      imageUrl,
+      widget.imageUrl,
       fit: BoxFit.contain,
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) return child;
@@ -92,9 +116,9 @@ class FullscreenMediaViewer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget imageWidget = _buildImageContent();
-    if (heroTag != null && heroTag!.isNotEmpty) {
+    if (widget.heroTag != null && widget.heroTag!.isNotEmpty) {
       imageWidget = Hero(
-        tag: heroTag!,
+        tag: widget.heroTag!,
         child: imageWidget,
       );
     }
@@ -113,6 +137,7 @@ class FullscreenMediaViewer extends StatelessWidget {
           ),
           Center(
             child: InteractiveViewer(
+              transformationController: _transformationController,
               minScale: 1.0,
               maxScale: 4.5,
               clipBehavior: Clip.none,
@@ -123,30 +148,49 @@ class FullscreenMediaViewer extends StatelessWidget {
               ),
             ),
           ),
-          // Top-right floating close button inside SafeArea
+          // Top controls inside SafeArea: Reset zoom & Close button (48x48dp pressable buttons)
           SafeArea(
-            child: Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: GestureDetector(
-                  onTap: () => Navigator.of(context).pop(),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: AmodoroTheme.floatingPerspectiveBox(
-                      color: const Color(0xFFFEFEFC),
-                      radius: 999,
-                      thickness: 2.2,
-                    ),
-                    alignment: Alignment.center,
-                    child: AmodoroTheme.sysIcon(
-                      Symbols.close,
-                      size: 20,
-                      color: const Color(0xFF1F1B18),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 12.0,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  AmodoroPressableButton(
+                    onTap: _resetZoom,
+                    color: AmodoroTheme.coralPillLight,
+                    lipColor: AmodoroTheme.coralPillBorderLight,
+                    lipHeight: 3.0,
+                    width: 48,
+                    height: 48,
+                    radius: 999,
+                    child: Center(
+                      child: AmodoroTheme.sysIcon(
+                        Symbols.restart_alt,
+                        size: 22,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
-                ),
+                  AmodoroPressableButton(
+                    onTap: () => Navigator.of(context).pop(),
+                    color: AmodoroTheme.coralPillLight,
+                    lipColor: AmodoroTheme.coralPillBorderLight,
+                    lipHeight: 3.0,
+                    width: 48,
+                    height: 48,
+                    radius: 999,
+                    child: Center(
+                      child: AmodoroTheme.sysIcon(
+                        Symbols.close,
+                        size: 22,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

@@ -1,4 +1,4 @@
-import { desc, eq, inArray, ne } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   homeCardReactions,
@@ -7,6 +7,7 @@ import {
   type CardFont,
   type CardFontSize,
 } from "@/db/schema";
+import { getPartnerUser } from "./auth";
 
 export type ReactionItem = {
   id: number;
@@ -26,6 +27,7 @@ export type HydratedHomeCard = {
   authorNicknameByPartner: string;
   mediaId: number | null;
   mediaType: string;
+  altText: string | null;
   linkUrl: string | null;
   linkTitle: string | null;
   linkThumbnail: string | null;
@@ -64,10 +66,21 @@ function attachReactions(
   }));
 }
 
-export function getReceivedHomeCards(viewerId: number): {
+export function getReceivedHomeCards(
+  viewerId: number,
+  options?: { limit?: number; offset?: number },
+): {
   latest: HydratedHomeCard | null;
   history: HydratedHomeCard[];
 } {
+  const partner = getPartnerUser(viewerId);
+  if (!partner) {
+    return { latest: null, history: [] };
+  }
+
+  const limit = Math.min(Math.max(options?.limit ?? 100, 1), 200);
+  const offset = Math.max(options?.offset ?? 0, 0);
+
   const rows = db
     .select({
       id: homeCards.id,
@@ -78,6 +91,7 @@ export function getReceivedHomeCards(viewerId: number): {
       authorNicknameByPartner: users.nicknameByPartner,
       mediaId: homeCards.mediaId,
       mediaType: homeCards.mediaType,
+      altText: homeCards.altText,
       linkUrl: homeCards.linkUrl,
       linkTitle: homeCards.linkTitle,
       linkThumbnail: homeCards.linkThumbnail,
@@ -91,8 +105,10 @@ export function getReceivedHomeCards(viewerId: number): {
     })
     .from(homeCards)
     .innerJoin(users, eq(homeCards.authorId, users.id))
-    .where(ne(homeCards.authorId, viewerId))
+    .where(eq(homeCards.authorId, partner.id))
     .orderBy(desc(homeCards.createdAt), desc(homeCards.id))
+    .limit(limit)
+    .offset(offset)
     .all();
 
   const hydrated = attachReactions(rows);
@@ -102,7 +118,13 @@ export function getReceivedHomeCards(viewerId: number): {
   };
 }
 
-export function getSentHomeCards(viewerId: number): HydratedHomeCard[] {
+export function getSentHomeCards(
+  viewerId: number,
+  options?: { limit?: number; offset?: number },
+): HydratedHomeCard[] {
+  const limit = Math.min(Math.max(options?.limit ?? 100, 1), 200);
+  const offset = Math.max(options?.offset ?? 0, 0);
+
   const rows = db
     .select({
       id: homeCards.id,
@@ -113,6 +135,7 @@ export function getSentHomeCards(viewerId: number): HydratedHomeCard[] {
       authorNicknameByPartner: users.nicknameByPartner,
       mediaId: homeCards.mediaId,
       mediaType: homeCards.mediaType,
+      altText: homeCards.altText,
       linkUrl: homeCards.linkUrl,
       linkTitle: homeCards.linkTitle,
       linkThumbnail: homeCards.linkThumbnail,
@@ -128,6 +151,8 @@ export function getSentHomeCards(viewerId: number): HydratedHomeCard[] {
     .innerJoin(users, eq(homeCards.authorId, users.id))
     .where(eq(homeCards.authorId, viewerId))
     .orderBy(desc(homeCards.createdAt), desc(homeCards.id))
+    .limit(limit)
+    .offset(offset)
     .all();
 
   return attachReactions(rows);
@@ -137,6 +162,7 @@ export function createHomeCard(input: {
   authorId: number;
   mediaId?: number | null;
   mediaType?: string;
+  altText?: string | null;
   linkUrl?: string | null;
   linkTitle?: string | null;
   linkThumbnail?: string | null;
@@ -179,6 +205,7 @@ export function createHomeCard(input: {
       authorId: input.authorId,
       mediaId: input.mediaId ?? null,
       mediaType: resolvedMediaType,
+      altText: input.altText?.trim() || null,
       linkUrl: cleanLink,
       linkTitle: input.linkTitle?.trim() || null,
       linkThumbnail: input.linkThumbnail?.trim() || null,
@@ -200,6 +227,7 @@ export function updateHomeCard(input: {
   newMediaId?: number | null;
   keepExistingMedia?: boolean;
   mediaType?: string;
+  altText?: string | null;
   linkUrl?: string | null;
   linkTitle?: string | null;
   linkThumbnail?: string | null;
@@ -272,6 +300,10 @@ export function updateHomeCard(input: {
     .set({
       mediaId: finalMediaId,
       mediaType: finalMediaType,
+      altText:
+        input.altText !== undefined
+          ? input.altText?.trim() || null
+          : existing.altText,
       linkUrl: finalLinkUrl,
       linkTitle: finalLinkTitle,
       linkThumbnail: finalLinkThumbnail,
@@ -314,9 +346,22 @@ export function reactToHomeCard(input: {
   emoji?: string | null;
   presetText?: string | null;
 }) {
+  const card = db
+    .select()
+    .from(homeCards)
+    .where(eq(homeCards.id, input.cardId))
+    .get();
+  if (!card) {
+    throw new Error("Tarjeta no encontrada.");
+  }
+
+  const partner = getPartnerUser(input.userId);
+  if (card.authorId !== input.userId && card.authorId !== partner?.id) {
+    throw new Error("No tienes permiso para reaccionar a esta tarjeta.");
+  }
+
   const emoji = input.emoji?.trim() || null;
   const presetText = input.presetText?.trim() || null;
-  if (!emoji && !presetText) return;
 
   const existing = db
     .select()
@@ -324,6 +369,28 @@ export function reactToHomeCard(input: {
     .where(eq(homeCardReactions.cardId, input.cardId))
     .all()
     .find((r) => r.userId === input.userId);
+
+  // If both are empty or user tapped the exact same emoji/presetText again, remove their reaction
+  if (
+    (!emoji && !presetText) ||
+    (existing &&
+      emoji &&
+      !presetText &&
+      existing.emoji === emoji &&
+      !existing.presetText) ||
+    (existing &&
+      presetText &&
+      !emoji &&
+      existing.presetText === presetText &&
+      !existing.emoji)
+  ) {
+    if (existing) {
+      db.delete(homeCardReactions)
+        .where(eq(homeCardReactions.id, existing.id))
+        .run();
+    }
+    return { removed: true };
+  }
 
   if (existing) {
     db.update(homeCardReactions)
@@ -345,4 +412,5 @@ export function reactToHomeCard(input: {
       })
       .run();
   }
+  return { removed: false };
 }

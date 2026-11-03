@@ -1,10 +1,13 @@
 import { getAllUsers, getPartnerUser } from "@/lib/auth";
 import {
   CORS_HEADERS,
+  extractRawTokenFromRequest,
   getApiUser,
   jsonResponse,
   loginApiUser,
+  type AuthMode,
 } from "@/lib/api-auth";
+import { getClientIp } from "@/lib/rate-limit";
 import type { AvatarId } from "@/db/schema";
 
 export async function OPTIONS() {
@@ -13,16 +16,12 @@ export async function OPTIONS() {
 
 export async function GET(request: Request) {
   const me = getApiUser(request);
-  const profiles = getAllUsers().map((u) => ({
-    id: u.id,
-    username: u.username,
-    displayName: u.displayName || u.username,
-    avatarId: u.avatarId || "cat",
-    nicknameByPartner: u.nicknameByPartner || u.displayName || u.username,
-  }));
+  const all = getAllUsers();
 
   return jsonResponse({
     ok: true,
+    serverUserCount: all.length,
+    maxUsersReached: all.length >= 2,
     authenticatedUser: me
       ? {
           id: me.id,
@@ -30,35 +29,48 @@ export async function GET(request: Request) {
           displayName: me.displayName || me.username,
           avatarId: me.avatarId || "cat",
           isPaired: Boolean(getPartnerUser(me.id)),
+          hasPin: Boolean(me.pinHash && me.pinHash.length > 0),
           nicknameByPartner: me.nicknameByPartner,
         }
       : null,
-    profiles,
   });
 }
 
 export async function POST(request: Request) {
   try {
     const currentUser = getApiUser(request);
+    const rawToken = extractRawTokenFromRequest(request);
+    const clientIp = getClientIp(request);
+
     const body = (await request.json()) as {
-      mode?: "password" | "code" | "quick" | "register" | "pair";
+      mode?: AuthMode;
       username?: string;
       displayName?: string;
       avatarId?: AvatarId;
+      pin?: string;
+      currentPin?: string;
+      newPin?: string;
+      recoveryCode?: string;
       password?: string;
       code?: string;
       userId?: number;
     };
 
     const result = await loginApiUser({
-      mode: body.mode ?? "password",
+      mode: body.mode ?? "pin_login",
       username: body.username,
       displayName: body.displayName,
       avatarId: body.avatarId,
+      pin: body.pin,
+      currentPin: body.currentPin,
+      newPin: body.newPin,
+      recoveryCode: body.recoveryCode,
       password: body.password,
       code: body.code,
       userId: body.userId,
       currentUserId: currentUser?.id,
+      rawToken,
+      clientIp,
       userAgent: request.headers.get("user-agent"),
     });
 
@@ -66,10 +78,14 @@ export async function POST(request: Request) {
       return jsonResponse(
         {
           ok: false,
-          error: "Credenciales o código no válidos.",
+          error: "Credenciales, PIN o código no válidos.",
         },
         401,
       );
+    }
+
+    if ("loggedOut" in result) {
+      return jsonResponse({ ok: true });
     }
 
     const partner = getPartnerUser(result.user.id);
@@ -78,6 +94,7 @@ export async function POST(request: Request) {
     return jsonResponse({
       ok: true,
       token: result.token,
+      recoveryCode: result.recoveryCode ?? null,
       isPaired,
       user: {
         id: result.user.id,
@@ -85,6 +102,7 @@ export async function POST(request: Request) {
         displayName: result.user.displayName || result.user.username,
         avatarId: result.user.avatarId || "cat",
         isPaired,
+        hasPin: Boolean(result.user.pinHash && result.user.pinHash.length > 0),
         nicknameByPartner: result.user.nicknameByPartner,
         themeMode: result.user.themeMode,
         accentPalette: result.user.accentPalette,

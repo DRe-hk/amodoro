@@ -7,6 +7,7 @@ import {
   decisionVotes,
   users,
 } from "@/db/schema";
+import { getPartnerUser } from "./auth";
 
 export type CandidateItem = {
   id: number;
@@ -38,13 +39,19 @@ function pickRandomSubset<T>(items: T[], count: number): T[] {
   return copy.slice(0, Math.min(count, copy.length));
 }
 
-export function getActividadesCandidates(): CandidateItem[] {
+export function getActividadesCandidates(viewerId?: number): CandidateItem[] {
   const actBoard = db
     .select()
     .from(boards)
     .where(eq(boards.slug, "actividades"))
     .get();
   if (!actBoard) return [];
+
+  let allowedUserIds: number[] | null = null;
+  if (viewerId !== undefined) {
+    const partner = getPartnerUser(viewerId);
+    allowedUserIds = partner ? [viewerId, partner.id] : [viewerId];
+  }
 
   return db
     .select({
@@ -56,10 +63,16 @@ export function getActividadesCandidates(): CandidateItem[] {
     })
     .from(boardItems)
     .where(
-      and(
-        eq(boardItems.boardId, actBoard.id),
-        isNull(boardItems.completedAt),
-      ),
+      allowedUserIds
+        ? and(
+            eq(boardItems.boardId, actBoard.id),
+            isNull(boardItems.completedAt),
+            inArray(boardItems.addedBy, allowedUserIds),
+          )
+        : and(
+            eq(boardItems.boardId, actBoard.id),
+            isNull(boardItems.completedAt),
+          ),
     )
     .all();
 }
@@ -209,14 +222,6 @@ export function startVotingDecision(batchSize = 5): ActiveDecisionState | null {
   };
 }
 
-/**
- * Submit a user's yes/no choices for the current round's 4-5 activities.
- * - Never reveals partial results while waiting for the other person.
- * - Once BOTH users have voted:
- *   - Exactly 1 common "want = true" -> Agreement! Winner resolved!
- *   - 2 or more common "want = true" (tie) -> Automatically advances to `roundNumber + 1` with ONLY those tied items so they vote again to break the tie without showing partial results.
- *   - 0 common "want = true" -> Automatically advances to `roundNumber + 1` with a fresh random batch of 4-5 items from Actividades until an agreement is reached.
- */
 export function submitVotingRoundChoices(input: {
   sessionId: number;
   userId: number;
@@ -267,7 +272,6 @@ export function submitVotingRoundChoices(input: {
       .run();
   }
 
-  // Check if all users (both partners) have now voted in this round
   const allUsersList = db.select().from(users).all();
   const allRoundVotes = db
     .select()
@@ -284,11 +288,9 @@ export function submitVotingRoundChoices(input: {
   const requiredVoters = Math.min(2, Math.max(1, allUsersList.length));
 
   if (distinctVoterIds.size < requiredVoters) {
-    // Still waiting for partner
     return;
   }
 
-  // Both partners have voted! Compute agreement (items where every voter said want = true)
   const agreedIds = candidateIds.filter((itemId) => {
     const votesForItem = allRoundVotes.filter((v) => v.itemId === itemId);
     return (
@@ -298,7 +300,6 @@ export function submitVotingRoundChoices(input: {
   });
 
   if (agreedIds.length === 1) {
-    // Unanimous single winner!
     db.update(decisionSessions)
       .set({
         status: "resolved",
@@ -311,7 +312,6 @@ export function submitVotingRoundChoices(input: {
   }
 
   if (agreedIds.length > 1) {
-    // Tie between 2+ agreed activities -> start next round automatically with the tied items
     db.update(decisionSessions)
       .set({
         roundNumber: session.roundNumber + 1,
@@ -322,7 +322,6 @@ export function submitVotingRoundChoices(input: {
     return;
   }
 
-  // 0 matches -> start next round automatically with a fresh 4-5 random sample
   const pool = getActividadesCandidates();
   const nextSubset = pickRandomSubset(
     pool,

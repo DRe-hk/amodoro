@@ -4,6 +4,7 @@ import '../models/amodoro_models.dart';
 import '../services/api_client.dart';
 import '../theme/amodoro_theme.dart';
 import 'flat_avatar.dart';
+import 'pressable_button.dart';
 
 class DecideSheet extends StatefulWidget {
   final SyncPayload sync;
@@ -147,10 +148,12 @@ class _DecideSheetState extends State<DecideSheet> {
       builder: (context, scrollController) {
         return Container(
           padding: const EdgeInsets.fromLTRB(22, 16, 22, 24),
-          decoration: AmodoroTheme.floatingPerspectiveBox(
+          decoration: AmodoroTheme.cardOutlineBox(
             color: surface,
             radius: 30,
-            thickness: 2.5,
+            borderColor: isDark ? const Color(0xFF383232) : const Color(0xFFE2DAD0),
+            borderWidth: 2.5,
+            subtleShadow: false,
           ),
           child: ListView(
             controller: scrollController,
@@ -158,126 +161,179 @@ class _DecideSheetState extends State<DecideSheet> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'DECIDIR EN PAREJA',
-                    style: TextStyle(fontSize: 12, letterSpacing: 1.5),
+                    style: AmodoroTheme.googleSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5,
+                      color: isDark ? Colors.white : AmodoroTheme.lightInk,
+                    ),
                   ),
-                  GestureDetector(
+                  AmodoroPressableButton(
                     onTap: () => Navigator.of(context).pop(),
-                    child: AmodoroTheme.sysIcon(Symbols.close, size: 20),
+                    color: isDark
+                        ? AmodoroTheme.darkContainer
+                        : const Color(0xFFF0ECE4),
+                    lipColor: isDark
+                        ? const Color(0xFF181515)
+                        : const Color(0xFFDCD6CE),
+                    lipHeight: 3.5,
+                    radius: 999,
+                    width: 38,
+                    height: 38,
+                    child: Center(
+                      child: AmodoroTheme.sysIcon(
+                        Symbols.close,
+                        size: 18,
+                        color: isDark ? Colors.white : AmodoroTheme.lightInk,
+                      ),
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
 
               if (winner != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: AmodoroTheme.floatingPerspectiveBox(
-                    color: AmodoroTheme.parseHexColor(winner.bgColor),
-                    radius: 24,
-                    thickness: 2.5,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'ACTIVIDAD ELEGIDA (${widget.sync.latestResolved?.mode == 'roulette' ? 'RULETA' : 'RONDA #${widget.sync.latestResolved?.roundNumber ?? 1}'})',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          letterSpacing: 1.2,
-                          color: Color(0xFF1F1B18),
-                        ),
+                Builder(
+                  builder: (_) {
+                    final winnerColor =
+                        AmodoroTheme.parseHexColor(winner.bgColor);
+                    return Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: AmodoroTheme.cardOutlineBox(
+                        color: winnerColor,
+                        radius: 24,
+                        borderColor:
+                            AmodoroTheme.darkenForPerspective(winnerColor, 0.16),
+                        borderWidth: 2.0,
+                        subtleShadow: false,
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        winner.title,
-                        style: const TextStyle(
-                          fontSize: 19,
-                          color: Color(0xFF1F1B18),
-                        ),
-                      ),
-                      if (winner.notes.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          winner.notes,
-                          style: const TextStyle(
-                            fontSize: 12.5,
-                            color: Color(0xFF4E453E),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ACTIVIDAD ELEGIDA (${widget.sync.latestResolved?.mode == 'roulette' ? 'RULETA' : 'RONDA #${widget.sync.latestResolved?.roundNumber ?? 1}'})',
+                            style: AmodoroTheme.googleSans(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.2,
+                              color: const Color(0xFF1F1B18),
+                            ),
                           ),
-                        ),
-                      ],
-                    ],
-                  ),
+                          const SizedBox(height: 6),
+                          Text(
+                            winner.title,
+                            style: AmodoroTheme.googleSans(
+                              fontSize: 19,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF1F1B18),
+                            ),
+                          ),
+                          if (winner.notes.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              winner.notes,
+                              style: AmodoroTheme.googleSans(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF4E453E),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
               ],
 
-              // Pestañas en perspectiva: RULETA vs VOTACIÓN 4-5
+              // Pestañas: RULETA AL AZAR vs VOTAR JUNTOS (AmodoroPressableButton con lipHeight: 3.5)
               Row(
                 children: [
                   Expanded(
-                    child: GestureDetector(
+                    child: AmodoroPressableButton(
                       onTap: () => setState(() => _tab = 0),
-                      child: Container(
-                        height: 42,
-                        decoration: AmodoroTheme.floatingPerspectiveBox(
-                          color: _tab == 0 ? coralBg : cardSurface,
-                          radius: 999,
-                          thickness: 2.0,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            AmodoroTheme.sysIcon(
-                              Symbols.casino,
-                              size: 18,
-                              color: _tab == 0 ? coralInk : null,
+                      color: _tab == 0 ? coralBg : cardSurface,
+                      lipColor: _tab == 0
+                          ? AmodoroTheme.coralPillBorderLight
+                          : (isDark
+                              ? const Color(0xFF181515)
+                              : const Color(0xFFDDD5C8)),
+                      lipHeight: 3.5,
+                      radius: 999,
+                      height: 44,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          AmodoroTheme.sysIcon(
+                            Symbols.casino,
+                            size: 18,
+                            color: _tab == 0
+                                ? coralInk
+                                : (isDark
+                                    ? Colors.white70
+                                    : AmodoroTheme.lightInk),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'RULETA AL AZAR',
+                            style: AmodoroTheme.googleSans(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.2,
+                              color: _tab == 0
+                                  ? coralInk
+                                  : (isDark
+                                      ? Colors.white70
+                                      : AmodoroTheme.lightInk),
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'RULETA',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                letterSpacing: 1.3,
-                                color: _tab == 0 ? coralInk : null,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: GestureDetector(
+                    child: AmodoroPressableButton(
                       onTap: () => setState(() => _tab = 1),
-                      child: Container(
-                        height: 42,
-                        decoration: AmodoroTheme.floatingPerspectiveBox(
-                          color: _tab == 1 ? coralBg : cardSurface,
-                          radius: 999,
-                          thickness: 2.0,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            AmodoroTheme.sysIcon(
-                              Symbols.how_to_vote,
-                              size: 18,
-                              color: _tab == 1 ? coralInk : null,
+                      color: _tab == 1 ? coralBg : cardSurface,
+                      lipColor: _tab == 1
+                          ? AmodoroTheme.coralPillBorderLight
+                          : (isDark
+                              ? const Color(0xFF181515)
+                              : const Color(0xFFDDD5C8)),
+                      lipHeight: 3.5,
+                      radius: 999,
+                      height: 44,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          AmodoroTheme.sysIcon(
+                            Symbols.how_to_vote,
+                            size: 18,
+                            color: _tab == 1
+                                ? coralInk
+                                : (isDark
+                                    ? Colors.white70
+                                    : AmodoroTheme.lightInk),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'VOTAR JUNTOS',
+                            style: AmodoroTheme.googleSans(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.2,
+                              color: _tab == 1
+                                  ? coralInk
+                                  : (isDark
+                                      ? Colors.white70
+                                      : AmodoroTheme.lightInk),
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'VOTACIÓN 4–5',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                letterSpacing: 1.3,
-                                color: _tab == 1 ? coralInk : null,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -289,16 +345,19 @@ class _DecideSheetState extends State<DecideSheet> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   margin: const EdgeInsets.only(bottom: 14),
-                  decoration: AmodoroTheme.floatingPerspectiveBox(
+                  decoration: AmodoroTheme.cardOutlineBox(
                     color: const Color(0xFFFFDAD6),
                     radius: 16,
-                    thickness: 2.0,
+                    borderColor: const Color(0xFFE5B5B0),
+                    borderWidth: 2.0,
+                    subtleShadow: false,
                   ),
                   child: Text(
                     _statusMessage!,
-                    style: const TextStyle(
+                    style: AmodoroTheme.googleSans(
                       fontSize: 12.5,
-                      color: Color(0xFF3B0D09),
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF3B0D09),
                     ),
                   ),
                 ),
@@ -307,38 +366,49 @@ class _DecideSheetState extends State<DecideSheet> {
               if (_tab == 0) ...[
                 Container(
                   padding: const EdgeInsets.all(22),
-                  decoration: AmodoroTheme.floatingPerspectiveBox(
+                  decoration: AmodoroTheme.cardOutlineBox(
                     color: cardSurface,
                     radius: 26,
-                    thickness: 2.5,
+                    borderColor: isDark
+                        ? const Color(0xFF383232)
+                        : const Color(0xFFE2DAD0),
+                    borderWidth: 2.0,
+                    subtleShadow: false,
                   ),
                   child: Column(
                     children: [
-                      AmodoroTheme.sysIcon(Symbols.casino, size: 42),
+                      AmodoroTheme.sysIcon(
+                        Symbols.casino,
+                        size: 42,
+                        color: coralBg,
+                      ),
                       const SizedBox(height: 12),
-                      const Text(
+                      Text(
                         'Elige inmediatamente 1 actividad al azar de su tablero de PENDIENTES.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 13.5, height: 1.4),
+                        style: AmodoroTheme.googleSans(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w500,
+                          height: 1.4,
+                          color: isDark ? Colors.white : AmodoroTheme.lightInk,
+                        ),
                       ),
                       const SizedBox(height: 18),
-                      GestureDetector(
+                      AmodoroPressableButton(
                         onTap: _busy ? null : _spinRoulette,
-                        child: Container(
-                          height: 46,
-                          decoration: AmodoroTheme.floatingPerspectiveBox(
-                            color: coralBg,
-                            radius: 999,
-                            thickness: 2.5,
-                          ),
-                          child: Center(
-                            child: Text(
-                              _busy ? 'GIRANDO...' : 'GIRAR RULETA AHORA',
-                              style: TextStyle(
-                                fontSize: 12,
-                                letterSpacing: 1.5,
-                                color: coralInk,
-                              ),
+                        color: coralBg,
+                        lipColor: AmodoroTheme.coralPillBorderLight,
+                        lipHeight: 3.5,
+                        radius: 999,
+                        height: 48,
+                        child: Center(
+                          child: Text(
+                            _busy ? 'GIRANDO...' : 'GIRAR RULETA AHORA',
+                            style: AmodoroTheme.googleSans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.5,
+                              color: coralInk,
                             ),
                           ),
                         ),
@@ -349,37 +419,46 @@ class _DecideSheetState extends State<DecideSheet> {
               ] else ...[
                 Container(
                   padding: const EdgeInsets.all(18),
-                  decoration: AmodoroTheme.floatingPerspectiveBox(
+                  decoration: AmodoroTheme.cardOutlineBox(
                     color: cardSurface,
                     radius: 26,
-                    thickness: 2.5,
+                    borderColor: isDark
+                        ? const Color(0xFF383232)
+                        : const Color(0xFFE2DAD0),
+                    borderWidth: 2.0,
+                    subtleShadow: false,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text(
+                      Text(
                         'Se eligen 4 o 5 pendientes al azar. Cada uno marca Sí o No en secreto. Si coinciden en una sola, gana; si hay empate, pasa automáticamente a otra ronda sin mostrar resultados parciales.',
-                        style: TextStyle(fontSize: 12.5, height: 1.4),
+                        style: AmodoroTheme.googleSans(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                          height: 1.4,
+                          color: isDark
+                              ? Colors.white70
+                              : const Color(0xFF4E453E),
+                        ),
                       ),
                       const SizedBox(height: 16),
                       if (voting == null) ...[
-                        GestureDetector(
+                        AmodoroPressableButton(
                           onTap: _busy ? null : _startVoting,
-                          child: Container(
-                            height: 46,
-                            decoration: AmodoroTheme.floatingPerspectiveBox(
-                              color: coralBg,
-                              radius: 999,
-                              thickness: 2.5,
-                            ),
-                            child: Center(
-                              child: Text(
-                                'INICIAR VOTACIÓN DE 4–5 AL AZAR',
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  letterSpacing: 1.4,
-                                  color: coralInk,
-                                ),
+                          color: coralBg,
+                          lipColor: AmodoroTheme.coralPillBorderLight,
+                          lipHeight: 3.5,
+                          radius: 999,
+                          height: 48,
+                          child: Center(
+                            child: Text(
+                              'INICIAR VOTACIÓN DE 4–5 AL AZAR',
+                              style: AmodoroTheme.googleSans(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.4,
+                                color: coralInk,
                               ),
                             ),
                           ),
@@ -387,58 +466,75 @@ class _DecideSheetState extends State<DecideSheet> {
                       ] else if (voting.myVoteSubmitted) ...[
                         Container(
                           padding: const EdgeInsets.all(18),
-                          decoration: AmodoroTheme.floatingPerspectiveBox(
-                            color: const Color(0xFFE8DEF8),
+                          decoration: AmodoroTheme.cardOutlineBox(
+                            color: isDark
+                                ? const Color(0xFF2C243B)
+                                : const Color(0xFFE8DEF8),
                             radius: 22,
-                            thickness: 2.0,
+                            borderColor: isDark
+                                ? const Color(0xFF4C3C68)
+                                : const Color(0xFFC7B6E2),
+                            borderWidth: 2.0,
+                            subtleShadow: false,
                           ),
                           child: Column(
                             children: [
                               AmodoroTheme.sysIcon(
                                 Symbols.lock,
                                 size: 32,
-                                color: const Color(0xFF1F1B18),
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF1F1B18),
                               ),
                               const SizedBox(height: 8),
                               Text(
                                 'RONDA #${voting.roundNumber} · VOTO SECRETO ENVIADO',
-                                style: const TextStyle(
+                                style: AmodoroTheme.googleSans(
                                   fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
                                   letterSpacing: 1.2,
-                                  color: Color(0xFF1F1B18),
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF1F1B18),
                                 ),
                               ),
                               const SizedBox(height: 6),
-                              const Text(
+                              Text(
                                 'Esperando a tu pareja. Los resultados parciales están ocultos.',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(
+                                style: AmodoroTheme.googleSans(
                                   fontSize: 12.5,
-                                  color: Color(0xFF4E453E),
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark
+                                      ? Colors.white70
+                                      : const Color(0xFF4E453E),
                                 ),
                               ),
                               const SizedBox(height: 14),
-                              GestureDetector(
+                              AmodoroPressableButton(
                                 onTap: widget.onRefresh,
-                                child: Container(
-                                  height: 40,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 18,
-                                  ),
-                                  decoration:
-                                      AmodoroTheme.floatingPerspectiveBox(
-                                    color: const Color(0xFFFCF9F5),
-                                    radius: 999,
-                                    thickness: 2.0,
-                                  ),
-                                  child: const Center(
-                                    child: Text(
-                                      'ACTUALIZAR ESTADO',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        letterSpacing: 1.2,
-                                        color: Color(0xFF1F1B18),
-                                      ),
+                                color: isDark
+                                    ? AmodoroTheme.darkContainer
+                                    : const Color(0xFFFCF9F5),
+                                lipColor: isDark
+                                    ? const Color(0xFF181515)
+                                    : const Color(0xFFDDD5C8),
+                                lipHeight: 3.5,
+                                radius: 999,
+                                height: 40,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 18,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    'ACTUALIZAR ESTADO',
+                                    style: AmodoroTheme.googleSans(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.2,
+                                      color: isDark
+                                          ? Colors.white
+                                          : const Color(0xFF1F1B18),
                                     ),
                                   ),
                                 ),
@@ -449,21 +545,32 @@ class _DecideSheetState extends State<DecideSheet> {
                       ] else ...[
                         Text(
                           'RONDA #${voting.roundNumber} · MARCA SÍ O NO:',
-                          style: const TextStyle(
+                          style: AmodoroTheme.googleSans(
                             fontSize: 11,
+                            fontWeight: FontWeight.w700,
                             letterSpacing: 1.2,
+                            color: isDark
+                                ? Colors.white70
+                                : AmodoroTheme.lightInk,
                           ),
                         ),
                         const SizedBox(height: 10),
                         ...voting.candidates.map((c) {
                           final currentVote = _votes[c.id] ?? true;
+                          final candColor =
+                              AmodoroTheme.parseHexColor(c.bgColor);
                           return Container(
                             margin: const EdgeInsets.only(bottom: 10),
                             padding: const EdgeInsets.all(12),
-                            decoration: AmodoroTheme.floatingPerspectiveBox(
-                              color: AmodoroTheme.parseHexColor(c.bgColor),
+                            decoration: AmodoroTheme.cardOutlineBox(
+                              color: candColor,
                               radius: 18,
-                              thickness: 2.0,
+                              borderColor: AmodoroTheme.darkenForPerspective(
+                                candColor,
+                                0.16,
+                              ),
+                              borderWidth: 2.0,
+                              subtleShadow: false,
                             ),
                             child: Row(
                               children: [
@@ -475,40 +582,40 @@ class _DecideSheetState extends State<DecideSheet> {
                                 Expanded(
                                   child: Text(
                                     c.title,
-                                    style: const TextStyle(
+                                    style: AmodoroTheme.googleSans(
                                       fontSize: 14,
-                                      color: Color(0xFF1F1B18),
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF1F1B18),
                                     ),
                                   ),
                                 ),
-                                GestureDetector(
+                                AmodoroPressableButton(
                                   onTap: () {
                                     setState(() {
                                       _votes[c.id] = !currentVote;
                                     });
                                   },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 7,
-                                    ),
-                                    decoration:
-                                        AmodoroTheme.floatingPerspectiveBox(
+                                  color: currentVote
+                                      ? coralBg
+                                      : const Color(0xFFFCF9F5),
+                                  lipColor: currentVote
+                                      ? AmodoroTheme.coralPillBorderLight
+                                      : const Color(0xFFDDD5C8),
+                                  lipHeight: 3.5,
+                                  radius: 999,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  child: Text(
+                                    currentVote ? 'SÍ' : 'NO',
+                                    style: AmodoroTheme.googleSans(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.2,
                                       color: currentVote
-                                          ? coralBg
-                                          : const Color(0xFFFCF9F5),
-                                      radius: 999,
-                                      thickness: 2.0,
-                                    ),
-                                    child: Text(
-                                      currentVote ? 'SÍ' : 'NO',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        letterSpacing: 1.2,
-                                        color: currentVote
-                                            ? coralInk
-                                            : const Color(0xFF1F1B18),
-                                      ),
+                                          ? coralInk
+                                          : const Color(0xFF1F1B18),
                                     ),
                                   ),
                                 ),
@@ -517,25 +624,21 @@ class _DecideSheetState extends State<DecideSheet> {
                           );
                         }),
                         const SizedBox(height: 8),
-                        GestureDetector(
+                        AmodoroPressableButton(
                           onTap: _busy ? null : () => _submitVotes(voting),
-                          child: Container(
-                            height: 46,
-                            decoration: AmodoroTheme.floatingPerspectiveBox(
-                              color: coralBg,
-                              radius: 999,
-                              thickness: 2.5,
-                            ),
-                            child: Center(
-                              child: Text(
-                                _busy
-                                    ? 'ENVIANDO...'
-                                    : 'ENVIAR MIS VOTOS EN SECRETO',
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  letterSpacing: 1.4,
-                                  color: coralInk,
-                                ),
+                          color: coralBg,
+                          lipColor: AmodoroTheme.coralPillBorderLight,
+                          lipHeight: 3.5,
+                          radius: 999,
+                          height: 48,
+                          child: Center(
+                            child: Text(
+                              _busy ? 'ENVIANDO...' : 'ENVIAR VOTOS',
+                              style: AmodoroTheme.googleSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.4,
+                                color: coralInk,
                               ),
                             ),
                           ),

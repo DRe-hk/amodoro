@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "267366064874",
+    "firebase_url": "https://algrthmlvu-d2fd6.firebaseio.com",
+    "project_id": "algrthmlvu-d2fd6",
+    "storage_bucket": "algrthmlvu-d2fd6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:267366064874:android:61e6ef3cb11839ff426d93",
+        "android_client_info": {
+          "package_name": "com.amodoro.amodoro_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB-aPyMs0QvzVCQ8_BuEXYyJHzrnc4l2R0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

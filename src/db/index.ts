@@ -30,6 +30,9 @@ function bootstrapSchema(sqlite: Database.Database) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT NOT NULL,
       password_hash TEXT NOT NULL,
+      pin_hash TEXT NOT NULL DEFAULT '',
+      recovery_code_hash TEXT NOT NULL DEFAULT '',
+      fcm_token TEXT,
       display_name TEXT NOT NULL DEFAULT '',
       avatar_id TEXT NOT NULL DEFAULT 'cat',
       partner_id INTEGER,
@@ -73,6 +76,7 @@ function bootstrapSchema(sqlite: Database.Database) {
       bytes INTEGER NOT NULL,
       width INTEGER,
       height INTEGER,
+      alt_text TEXT,
       created_at INTEGER NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS media_path_idx ON media(path);
@@ -82,6 +86,7 @@ function bootstrapSchema(sqlite: Database.Database) {
       author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       media_id INTEGER REFERENCES media(id) ON DELETE SET NULL,
       media_type TEXT NOT NULL DEFAULT 'none',
+      alt_text TEXT,
       link_url TEXT,
       link_title TEXT,
       link_thumbnail TEXT,
@@ -111,6 +116,7 @@ function bootstrapSchema(sqlite: Database.Database) {
       title TEXT NOT NULL,
       icon TEXT NOT NULL DEFAULT 'sparkles',
       bg_color TEXT NOT NULL DEFAULT '#F4EFE8',
+      sort_order INTEGER NOT NULL DEFAULT 0,
       is_system INTEGER NOT NULL DEFAULT 0,
       created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at INTEGER NOT NULL
@@ -130,11 +136,35 @@ function bootstrapSchema(sqlite: Database.Database) {
       emoji TEXT,
       bg_color TEXT NOT NULL DEFAULT '#FFDAD6',
       media_id INTEGER REFERENCES media(id) ON DELETE SET NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      due_date TEXT,
       added_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       completed_at INTEGER,
+      completed_by INTEGER,
+      completion_text TEXT,
+      completion_media_id INTEGER,
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS board_items_board_idx ON board_items(board_id);
+
+    CREATE TABLE IF NOT EXISTS board_item_reactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER NOT NULL REFERENCES board_items(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      emoji TEXT,
+      preset_text TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS board_item_reactions_item_idx ON board_item_reactions(item_id);
+
+    CREATE TABLE IF NOT EXISTS link_preview_cache (
+      url_hash TEXT PRIMARY KEY,
+      url TEXT NOT NULL,
+      title TEXT NOT NULL,
+      thumbnail TEXT,
+      platform TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
 
     CREATE TABLE IF NOT EXISTS decision_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -163,16 +193,21 @@ function bootstrapSchema(sqlite: Database.Database) {
   safeAddColumn(sqlite, "users", "display_name TEXT NOT NULL DEFAULT ''");
   safeAddColumn(sqlite, "users", "avatar_id TEXT NOT NULL DEFAULT 'cat'");
   safeAddColumn(sqlite, "users", "partner_id INTEGER");
+  safeAddColumn(sqlite, "users", "pin_hash TEXT NOT NULL DEFAULT ''");
+  safeAddColumn(sqlite, "users", "recovery_code_hash TEXT NOT NULL DEFAULT ''");
+  safeAddColumn(sqlite, "users", "fcm_token TEXT");
   safeAddColumn(
     sqlite,
     "users",
     `reaction_emojis_json TEXT NOT NULL DEFAULT '["❤️","🥰","🥺","✨","🔥","🫶"]'`,
   );
+  safeAddColumn(sqlite, "media", "alt_text TEXT");
   safeAddColumn(
     sqlite,
     "home_cards",
     "media_type TEXT NOT NULL DEFAULT 'none'",
   );
+  safeAddColumn(sqlite, "home_cards", "alt_text TEXT");
   safeAddColumn(sqlite, "home_cards", "link_url TEXT");
   safeAddColumn(sqlite, "home_cards", "link_title TEXT");
   safeAddColumn(sqlite, "home_cards", "link_thumbnail TEXT");
@@ -187,6 +222,7 @@ function bootstrapSchema(sqlite: Database.Database) {
     "boards",
     "bg_color TEXT NOT NULL DEFAULT '#F4EFE8'",
   );
+  safeAddColumn(sqlite, "boards", "sort_order INTEGER NOT NULL DEFAULT 0");
   safeAddColumn(sqlite, "board_items", "link_title TEXT");
   safeAddColumn(sqlite, "board_items", "link_thumbnail TEXT");
   safeAddColumn(sqlite, "board_items", "link_platform TEXT");
@@ -195,6 +231,11 @@ function bootstrapSchema(sqlite: Database.Database) {
     "board_items",
     "bg_color TEXT NOT NULL DEFAULT '#FFDAD6'",
   );
+  safeAddColumn(sqlite, "board_items", "sort_order INTEGER NOT NULL DEFAULT 0");
+  safeAddColumn(sqlite, "board_items", "due_date TEXT");
+  safeAddColumn(sqlite, "board_items", "completed_by INTEGER");
+  safeAddColumn(sqlite, "board_items", "completion_text TEXT");
+  safeAddColumn(sqlite, "board_items", "completion_media_id INTEGER");
 }
 
 function open(): Database.Database {

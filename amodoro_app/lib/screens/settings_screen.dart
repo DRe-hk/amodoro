@@ -1,14 +1,19 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../models/amodoro_models.dart';
 import '../services/api_client.dart';
 import '../theme/amodoro_theme.dart';
 import '../widgets/flat_avatar.dart';
+import '../widgets/pin_keypad.dart';
+import '../widgets/pressable_button.dart';
 
 class SettingsScreen extends StatefulWidget {
   final SyncPayload sync;
   final AmodoroApiClient api;
   final Future<void> Function() onRefresh;
+  final ValueChanged<String>? onThemeChanged;
   final VoidCallback onLogout;
 
   const SettingsScreen({
@@ -16,6 +21,7 @@ class SettingsScreen extends StatefulWidget {
     required this.sync,
     required this.api,
     required this.onRefresh,
+    this.onThemeChanged,
     required this.onLogout,
   });
 
@@ -24,9 +30,21 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  static const List<Map<String, String>> _avatarCatalog = [
+    {'id': 'cat', 'label': 'Gato'},
+    {'id': 'dog', 'label': 'Perro'},
+    {'id': 'rabbit', 'label': 'Conejo'},
+    {'id': 'bear', 'label': 'Oso'},
+    {'id': 'fox', 'label': 'Zorro'},
+    {'id': 'panda', 'label': 'Panda'},
+    {'id': 'chick', 'label': 'Pollito'},
+    {'id': 'gray_kitten', 'label': 'Gatito gris'},
+  ];
+
   late String _avatarId;
   late final TextEditingController _myDisplayNameCtrl;
   late final TextEditingController _partnerNicknameCtrl;
+  late final TextEditingController _pairCodeCtrl;
   late final TextEditingController _newReplyCtrl;
   late final TextEditingController _newEmojiCtrl;
   late String _themeMode;
@@ -36,7 +54,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _saving = false;
   bool _addingReply = false;
   bool _addingEmoji = false;
+  bool _pairingBusy = false;
+  bool _exportingBusy = false;
+
   String? _generatedInvite;
+  String? _generatedPartnerResetCode;
+  String? _updatedRecoveryCode;
 
   @override
   void initState() {
@@ -44,8 +67,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _avatarId = widget.sync.me.avatarId;
     _myDisplayNameCtrl =
         TextEditingController(text: widget.sync.me.displayName);
+    _myDisplayNameCtrl.addListener(_onDisplayNameChanged);
     _partnerNicknameCtrl =
         TextEditingController(text: widget.sync.me.partnerNicknameGiven);
+    _pairCodeCtrl = TextEditingController();
     _newReplyCtrl = TextEditingController();
     _newEmojiCtrl = TextEditingController();
     _themeMode = widget.sync.me.themeMode == 'auto'
@@ -60,18 +85,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    _myDisplayNameCtrl.removeListener(_onDisplayNameChanged);
     _myDisplayNameCtrl.dispose();
     _partnerNicknameCtrl.dispose();
+    _pairCodeCtrl.dispose();
     _newReplyCtrl.dispose();
     _newEmojiCtrl.dispose();
     super.dispose();
   }
 
+  void _onDisplayNameChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  bool get _isZafiroEasterEgg =>
+      _myDisplayNameCtrl.text.trim().toLowerCase() == 'zafiro' &&
+      _avatarId == 'gray_kitten';
+
   void _onSelectAvatar(String id) {
     setState(() {
       _avatarId = id;
-      // Easter egg: si elige el gatito gris bebé ('gray_kitten'),
-      // el campo de nombre cambia automáticamente a "zafiro" (sin guardarse solo, editable ahí mismo).
       if (id == 'gray_kitten') {
         _myDisplayNameCtrl.text = 'zafiro';
         _myDisplayNameCtrl.selection = TextSelection.fromPosition(
@@ -93,6 +128,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         quickReplies: _quickReplies,
         reactionEmojis: _reactionEmojis,
       );
+      widget.onThemeChanged?.call(_themeMode);
       await widget.onRefresh();
       if (mounted) {
         setState(() => _saving = false);
@@ -158,465 +194,1249 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _pairWithPartnerCode() async {
+    final code = _pairCodeCtrl.text.trim();
+    if (code.isEmpty) return;
+    setState(() => _pairingBusy = true);
+    try {
+      await widget.api.pairWithCode(code);
+      _pairCodeCtrl.clear();
+      await widget.onRefresh();
+      if (mounted) {
+        setState(() => _pairingBusy = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('¡Vinculado con tu pareja!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _pairingBusy = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showChangePinSheet() async {
+    String? currentPin;
+    String? sheetError;
+    bool sheetBusy = false;
+    final keypadKey = GlobalKey<PinKeypadWidgetState>();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        final isDark = Theme.of(sheetCtx).brightness == Brightness.dark;
+        final cardBg = isDark ? AmodoroTheme.darkContainer : Colors.white;
+        final fieldBg =
+            isDark ? const Color(0xFF1B1818) : AmodoroTheme.lightContainer;
+        final borderColor =
+            isDark ? const Color(0xFF383232) : const Color(0xFFE9E4DC);
+        final inkColor = isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk;
+
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            Future<void> onPinEntered(String pin) async {
+              if (currentPin == null) {
+                setModalState(() {
+                  currentPin = pin;
+                  sheetError = null;
+                });
+                keypadKey.currentState?.clear();
+                return;
+              }
+
+              setModalState(() {
+                sheetBusy = true;
+                sheetError = null;
+              });
+
+              try {
+                final res = await widget.api.changePin(
+                  currentPin: currentPin,
+                  newPin: pin,
+                );
+                final newRecovery = res['recoveryCode']?.toString();
+                if (sheetCtx.mounted) {
+                  Navigator.of(sheetCtx).pop();
+                }
+                if (mounted) {
+                  setState(() {
+                    if (newRecovery != null && newRecovery.isNotEmpty) {
+                      _updatedRecoveryCode = newRecovery;
+                    }
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('PIN de 4 dígitos actualizado correctamente'),
+                    ),
+                  );
+                }
+              } catch (e) {
+                setModalState(() {
+                  sheetBusy = false;
+                  currentPin = null;
+                  sheetError = e.toString().replaceFirst('Exception: ', '');
+                });
+                keypadKey.currentState?.clear();
+              }
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+              ),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
+                decoration: AmodoroTheme.cardOutlineBox(
+                  color: cardBg,
+                  radius: 32,
+                  borderColor: borderColor,
+                  borderWidth: 2.5,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'CAMBIAR PIN DE 4 DÍGITOS',
+                          style: AmodoroTheme.googleSans(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.0,
+                            color: inkColor,
+                          ),
+                        ),
+                        AmodoroPressableButton(
+                          onTap: () => Navigator.of(sheetCtx).pop(),
+                          color: fieldBg,
+                          borderColor: borderColor,
+                          borderWidth: 1.5,
+                          lipHeight: 2.5,
+                          radius: 999,
+                          width: 48,
+                          height: 48,
+                          child: AmodoroTheme.sysIcon(
+                            Symbols.close,
+                            size: 20,
+                            color: inkColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    PinKeypadWidget(
+                      key: keypadKey,
+                      subtitle: currentPin == null
+                          ? 'PASO 1 · INGRESA TU PIN ACTUAL'
+                          : 'PASO 2 · INGRESA TU NUEVO PIN DE 4 DÍGITOS',
+                      errorText: sheetError,
+                      busy: sheetBusy,
+                      onPinCompleted: onPinEntered,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _generatePartnerResetCode() async {
+    try {
+      final code = await widget.api.generatePartnerPinResetCode();
+      if (mounted) {
+        setState(() {
+          _generatedPartnerResetCode = code;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportMyDataJson() async {
+    setState(() => _exportingBusy = true);
+    try {
+      final data = await widget.api.exportMyData();
+      final formattedJson = const JsonEncoder.withIndent('  ').convert(data);
+      await Clipboard.setData(ClipboardData(text: formattedJson));
+      if (!mounted) return;
+      setState(() => _exportingBusy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tus datos se copiaron al portapapeles en formato JSON'),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _exportingBusy = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  void _lockAppWithPin() {
+    widget.api.isPinUnlocked = false;
+    widget.onLogout();
+  }
+
+  Future<void> _unlinkDevice() async {
+    await widget.api.logout(clearRememberedAccount: true);
+    widget.onLogout();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface =
-        isDark ? AmodoroTheme.darkContainer : AmodoroTheme.lightContainer;
+    final cardBg = isDark ? AmodoroTheme.darkContainer : Colors.white;
+    final fieldBg =
+        isDark ? const Color(0xFF1B1818) : AmodoroTheme.lightContainer;
+    final borderColor =
+        isDark ? const Color(0xFF383232) : const Color(0xFFE9E4DC);
     final coralBg =
         isDark ? AmodoroTheme.coralPillDark : AmodoroTheme.coralPillLight;
-    final coralInk = AmodoroTheme.coralText(isDark);
+    final coralLip = isDark
+        ? AmodoroTheme.coralPillBorderDark
+        : AmodoroTheme.coralPillBorderLight;
+    final inkColor = isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk;
+    final mutedColor =
+        isDark ? AmodoroTheme.darkMuted : AmodoroTheme.lightMuted;
     final me = widget.sync.me;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 22, 30),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
       children: [
-        // 1. Parte superior: Avatar predefinido en estilo Flat elegido por el usuario
-        Center(
-          child: FlatAvatarBadge(
-            avatarId: _avatarId,
-            size: 88,
-            showPerspectiveBorder: true,
+        // ---------------------------------------------------------------------
+        // SECCIÓN 1: Perfil y Avatar (Non-button container uses cardOutlineBox)
+        // ---------------------------------------------------------------------
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: AmodoroTheme.cardOutlineBox(
+            color: cardBg,
+            radius: 28,
+            borderColor: borderColor,
+            borderWidth: 2.5,
           ),
-        ),
-        const SizedBox(height: 14),
-        FlatAvatarSelector(
-          selectedAvatarId: _avatarId,
-          onSelect: _onSelectAvatar,
-        ),
-        const SizedBox(height: 16),
-
-        // 2. Debajo: El nombre que el usuario se puso a sí mismo
-        Center(
-          child: SizedBox(
-            width: 220,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: AmodoroTheme.floatingPerspectiveBox(
-                color: surface,
-                radius: 999,
-                thickness: 2.0,
-              ),
-              child: TextField(
-                controller: _myDisplayNameCtrl,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16, letterSpacing: 0.6),
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  hintText: 'Tu nombre',
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(vertical: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: FlatAvatarBadge(
+                  avatarId: _avatarId,
+                  size: 88,
+                  borderWidth: 2.5,
                 ),
               ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
+              const SizedBox(height: 14),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 10,
+                runSpacing: 10,
+                children: _avatarCatalog.map((entry) {
+                  final id = entry['id']!;
+                  final label = entry['label']!;
+                  final isSelected = id == _avatarId;
+                  return GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _onSelectAvatar(id),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(2.5),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isSelected ? coralBg : borderColor,
+                              width: 2.5,
+                            ),
+                          ),
+                          child: FlatAvatarBadge(
+                            avatarId: id,
+                            size: 46,
+                            showPerspectiveBorder: false,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          label,
+                          style: AmodoroTheme.googleSans(
+                            fontSize: 11,
+                            fontWeight: isSelected
+                                ? FontWeight.w800
+                                : FontWeight.w600,
+                            color: isSelected ? inkColor : mutedColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
 
-        // 3. Debajo en una sola línea: el apodo que le puso la otra persona (sin explicaciones)
-        Center(
-          child: Text(
-            me.nicknameByPartner,
-            style: TextStyle(
-              fontSize: 13.5,
-              letterSpacing: 1.1,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-
-        // 4. Apodo que tú le pones a tu pareja
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          decoration: AmodoroTheme.floatingPerspectiveBox(
-            color: surface,
-            radius: 20,
-            thickness: 2.5,
-          ),
-          child: TextField(
-            controller: _partnerNicknameCtrl,
-            decoration: InputDecoration(
-              border: InputBorder.none,
-              labelText: 'APODO DE TU PAREJA',
-              labelStyle: const TextStyle(fontSize: 11, letterSpacing: 1.2),
-              icon: AmodoroTheme.sysIcon(Symbols.favorite, size: 20),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // 5. Selector de Tema en menú desplegable con iconos del sistema (por defecto Automático)
-        Container(
-          height: 50,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: AmodoroTheme.floatingPerspectiveBox(
-            color: surface,
-            radius: 999,
-            thickness: 2.5,
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _themeMode,
-              isExpanded: true,
-              icon: AmodoroTheme.sysIcon(Symbols.expand_more, size: 20),
-              items: [
-                DropdownMenuItem(
-                  value: 'system',
-                  child: Row(
-                    children: [
-                      AmodoroTheme.sysIcon(Symbols.contrast, size: 18),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'TEMA AUTOMÁTICO',
-                        style: TextStyle(fontSize: 12.5, letterSpacing: 1.2),
-                      ),
-                    ],
+              if (_isZafiroEasterEgg) ...[
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
                   ),
-                ),
-                DropdownMenuItem(
-                  value: 'light',
-                  child: Row(
-                    children: [
-                      AmodoroTheme.sysIcon(Symbols.light_mode, size: 18),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'TEMA CLARO',
-                        style: TextStyle(fontSize: 12.5, letterSpacing: 1.2),
-                      ),
-                    ],
+                  decoration: AmodoroTheme.cardOutlineBox(
+                    color: const Color(0xFFEADCF8),
+                    radius: 18,
+                    borderColor: const Color(0xFFB392DC),
+                    borderWidth: 2.5,
+                    subtleShadow: false,
                   ),
-                ),
-                DropdownMenuItem(
-                  value: 'dark',
-                  child: Row(
-                    children: [
-                      AmodoroTheme.sysIcon(Symbols.dark_mode, size: 18),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'TEMA OSCURO',
-                        style: TextStyle(fontSize: 12.5, letterSpacing: 1.2),
-                      ),
-                    ],
+                  child: Text(
+                    '🐾 ¡Miau! Zafiro desbloqueó su gatito gris especial ✨',
+                    textAlign: TextAlign.center,
+                    style: AmodoroTheme.googleSans(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF473A3A),
+                    ),
                   ),
                 ),
               ],
-              onChanged: (val) {
-                if (val != null) setState(() => _themeMode = val);
-              },
-            ),
-          ),
-        ),
-        const SizedBox(height: 22),
+              const SizedBox(height: 16),
 
-        // 6. Personalización de emojis de reacción de HOME
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'EMOJIS DE REACCIÓN EN HOME',
-              style: TextStyle(fontSize: 11.5, letterSpacing: 1.3),
-            ),
-            GestureDetector(
-              onTap: () => setState(() => _addingEmoji = !_addingEmoji),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: AmodoroTheme.floatingPerspectiveBox(
-                  color: surface,
-                  radius: 999,
-                  thickness: 2.0,
-                ),
-                child: const Text(
-                  '* AÑADIR',
-                  style: TextStyle(fontSize: 11, letterSpacing: 1.2),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        if (_addingEmoji) ...[
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              children: [
-                Expanded(
+              // Input Tu nombre (cardOutlineBox borderWidth: 2.5, NO 3D lip)
+              Center(
+                child: SizedBox(
+                  width: 240,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14),
-                    decoration: AmodoroTheme.floatingPerspectiveBox(
-                      color: surface,
-                      radius: 18,
-                      thickness: 2.0,
+                    decoration: AmodoroTheme.cardOutlineBox(
+                      color: fieldBg,
+                      radius: 999,
+                      borderColor: borderColor,
+                      borderWidth: 2.5,
+                      subtleShadow: false,
                     ),
                     child: TextField(
-                      controller: _newEmojiCtrl,
-                      autofocus: true,
-                      onSubmitted: (_) => _addReactionEmoji(),
+                      controller: _myDisplayNameCtrl,
+                      textAlign: TextAlign.center,
+                      style: AmodoroTheme.googleSans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4,
+                        color: inkColor,
+                      ),
                       decoration: const InputDecoration(
                         border: InputBorder.none,
-                        hintText: 'Escribe un emoji...',
+                        hintText: 'Tu nombre',
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(vertical: 10),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                GestureDetector(
-                  onTap: _addReactionEmoji,
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: AmodoroTheme.floatingPerspectiveBox(
-                      color: coralBg,
-                      radius: 999,
-                      thickness: 2.0,
-                    ),
-                    child: Center(
-                      child: AmodoroTheme.sysIcon(
-                        Symbols.check,
-                        size: 20,
-                        color: coralInk,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: List.generate(_reactionEmojis.length, (i) {
-            final emo = _reactionEmojis[i];
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: AmodoroTheme.floatingPerspectiveBox(
-                color: surface,
-                radius: 999,
-                thickness: 2.0,
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(emo, style: const TextStyle(fontSize: 15)),
-                  if (_reactionEmojis.length > 1) ...[
-                    const SizedBox(width: 6),
-                    GestureDetector(
-                      onTap: () => _removeEmojiAt(i),
-                      child: AmodoroTheme.sysIcon(
-                        Symbols.close,
-                        size: 15,
-                      ),
+              const SizedBox(height: 10),
+
+              Center(
+                child: Text(
+                  me.nicknameByPartner,
+                  style: AmodoroTheme.googleSans(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: mutedColor,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // Apodo que tú le pones a tu pareja (cardOutlineBox borderWidth: 2.5)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                decoration: AmodoroTheme.cardOutlineBox(
+                  color: fieldBg,
+                  radius: 20,
+                  borderColor: borderColor,
+                  borderWidth: 2.5,
+                  subtleShadow: false,
+                ),
+                child: TextField(
+                  controller: _partnerNicknameCtrl,
+                  style: AmodoroTheme.googleSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: inkColor,
+                  ),
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    labelText: 'APODO DE TU PAREJA',
+                    labelStyle: AmodoroTheme.googleSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.1,
+                      color: mutedColor,
                     ),
-                  ],
+                    icon: AmodoroTheme.sysIcon(
+                      Symbols.favorite,
+                      size: 20,
+                      color: coralBg,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Selector de Tema (Theme mode pills using AmodoroPressableButton)
+              Text(
+                'MODO DE TEMA',
+                style: AmodoroTheme.googleSans(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
+                  color: mutedColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _buildThemePill(
+                    mode: 'system',
+                    label: 'AUTO',
+                    icon: Symbols.contrast,
+                    fieldBg: fieldBg,
+                    borderColor: borderColor,
+                    coralBg: coralBg,
+                    coralLip: coralLip,
+                    inkColor: inkColor,
+                  ),
+                  const SizedBox(width: 8),
+                  _buildThemePill(
+                    mode: 'light',
+                    label: 'CLARO',
+                    icon: Symbols.light_mode,
+                    fieldBg: fieldBg,
+                    borderColor: borderColor,
+                    coralBg: coralBg,
+                    coralLip: coralLip,
+                    inkColor: inkColor,
+                  ),
+                  const SizedBox(width: 8),
+                  _buildThemePill(
+                    mode: 'dark',
+                    label: 'OSCURO',
+                    icon: Symbols.dark_mode,
+                    fieldBg: fieldBg,
+                    borderColor: borderColor,
+                    coralBg: coralBg,
+                    coralLip: coralLip,
+                    inkColor: inkColor,
+                  ),
                 ],
               ),
-            );
-          }),
-        ),
-        const SizedBox(height: 22),
-
-        // 7. Lista de textos predeterminados con botón de añadir (*) y botón de eliminar al lado de cada frase
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'RESPUESTAS PREDETERMINADAS',
-              style: TextStyle(fontSize: 11.5, letterSpacing: 1.3),
-            ),
-            GestureDetector(
-              onTap: () => setState(() => _addingReply = !_addingReply),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: AmodoroTheme.floatingPerspectiveBox(
-                  color: surface,
-                  radius: 999,
-                  thickness: 2.0,
-                ),
-                child: const Text(
-                  '* AÑADIR',
-                  style: TextStyle(fontSize: 11, letterSpacing: 1.2),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        if (_addingReply) ...[
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    decoration: AmodoroTheme.floatingPerspectiveBox(
-                      color: surface,
-                      radius: 18,
-                      thickness: 2.0,
-                    ),
-                    child: TextField(
-                      controller: _newReplyCtrl,
-                      autofocus: true,
-                      onSubmitted: (_) => _addReplyPhrase(),
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        hintText: 'Nueva frase...',
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                GestureDetector(
-                  onTap: _addReplyPhrase,
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: AmodoroTheme.floatingPerspectiveBox(
-                      color: coralBg,
-                      radius: 999,
-                      thickness: 2.0,
-                    ),
-                    child: Center(
-                      child: AmodoroTheme.sysIcon(
-                        Symbols.check,
-                        size: 20,
-                        color: coralInk,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            ],
           ),
-        ],
-        ...List.generate(_quickReplies.length, (i) {
-          final phrase = _quickReplies[i];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: AmodoroTheme.floatingPerspectiveBox(
-                color: surface,
-                radius: 18,
-                thickness: 2.0,
-              ),
-              child: Row(
+        ),
+        const SizedBox(height: 18),
+
+        // ---------------------------------------------------------------------
+        // SECCIÓN 2: Emojis y Respuestas Predeterminadas
+        // ---------------------------------------------------------------------
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: AmodoroTheme.cardOutlineBox(
+            color: cardBg,
+            radius: 28,
+            borderColor: borderColor,
+            borderWidth: 2.5,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
                     child: Text(
-                      phrase,
-                      style: const TextStyle(fontSize: 13.5),
+                      'EMOJIS DE REACCIÓN EN HOME',
+                      style: AmodoroTheme.googleSans(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.1,
+                        color: inkColor,
+                      ),
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () => _removeReplyAt(i),
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: AmodoroTheme.sysIcon(
-                        Symbols.delete,
-                        size: 18,
+                  AmodoroPressableButton(
+                    onTap: () => setState(() => _addingEmoji = !_addingEmoji),
+                    color: fieldBg,
+                    borderColor: borderColor,
+                    borderWidth: 1.5,
+                    lipColor: borderColor,
+                    lipHeight: 2.5,
+                    radius: 999,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    child: Text(
+                      '+ AÑADIR',
+                      style: AmodoroTheme.googleSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.0,
+                        color: inkColor,
                       ),
                     ),
                   ),
                 ],
               ),
-            ),
-          );
-        }),
-        const SizedBox(height: 16),
+              const SizedBox(height: 12),
+              if (_addingEmoji) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          decoration: AmodoroTheme.cardOutlineBox(
+                            color: fieldBg,
+                            radius: 18,
+                            borderColor: borderColor,
+                            borderWidth: 2.5,
+                            subtleShadow: false,
+                          ),
+                          child: TextField(
+                            controller: _newEmojiCtrl,
+                            autofocus: true,
+                            onSubmitted: (_) => _addReactionEmoji(),
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              hintText: 'Escribe un emoji...',
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      AmodoroPressableButton(
+                        onTap: _addReactionEmoji,
+                        color: coralBg,
+                        lipColor: coralLip,
+                        lipHeight: 3.0,
+                        radius: 999,
+                        width: 48,
+                        height: 48,
+                        child: AmodoroTheme.sysIcon(
+                          Symbols.check,
+                          size: 20,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: List.generate(_reactionEmojis.length, (i) {
+                  final emo = _reactionEmojis[i];
+                  return AmodoroPressableButton(
+                    onTap: _reactionEmojis.length > 1
+                        ? () => _removeEmojiAt(i)
+                        : null,
+                    color: fieldBg,
+                    borderColor: borderColor,
+                    borderWidth: 1.5,
+                    lipColor: borderColor,
+                    lipHeight: 2.5,
+                    radius: 999,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(emo, style: const TextStyle(fontSize: 15)),
+                        if (_reactionEmojis.length > 1) ...[
+                          const SizedBox(width: 6),
+                          AmodoroTheme.sysIcon(
+                            Symbols.close,
+                            size: 15,
+                            color: mutedColor,
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 22),
 
-        // Botón Guardar
-        GestureDetector(
-          onTap: _saving ? null : _saveSettings,
-          child: Container(
-            height: 48,
-            decoration: AmodoroTheme.floatingPerspectiveBox(
-              color: coralBg,
-              radius: 999,
-              thickness: 2.5,
-              perspectiveEdgeColor: isDark
-                  ? AmodoroTheme.coralPillBorderDark
-                  : AmodoroTheme.coralPillBorderLight,
-            ),
-            child: Center(
-              child: Text(
-                _saving ? 'GUARDANDO...' : 'GUARDAR CAMBIOS',
-                style: TextStyle(
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'RESPUESTAS PREDETERMINADAS',
+                      style: AmodoroTheme.googleSans(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.1,
+                        color: inkColor,
+                      ),
+                    ),
+                  ),
+                  AmodoroPressableButton(
+                    onTap: () => setState(() => _addingReply = !_addingReply),
+                    color: fieldBg,
+                    borderColor: borderColor,
+                    borderWidth: 1.5,
+                    lipColor: borderColor,
+                    lipHeight: 2.5,
+                    radius: 999,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    child: Text(
+                      '+ AÑADIR',
+                      style: AmodoroTheme.googleSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.0,
+                        color: inkColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (_addingReply) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          decoration: AmodoroTheme.cardOutlineBox(
+                            color: fieldBg,
+                            radius: 18,
+                            borderColor: borderColor,
+                            borderWidth: 2.5,
+                            subtleShadow: false,
+                          ),
+                          child: TextField(
+                            controller: _newReplyCtrl,
+                            autofocus: true,
+                            onSubmitted: (_) => _addReplyPhrase(),
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              hintText: 'Nueva frase...',
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      AmodoroPressableButton(
+                        onTap: _addReplyPhrase,
+                        color: coralBg,
+                        lipColor: coralLip,
+                        lipHeight: 3.0,
+                        radius: 999,
+                        width: 48,
+                        height: 48,
+                        child: AmodoroTheme.sysIcon(
+                          Symbols.check,
+                          size: 20,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              ...List.generate(_quickReplies.length, (i) {
+                final phrase = _quickReplies[i];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    decoration: AmodoroTheme.cardOutlineBox(
+                      color: fieldBg,
+                      radius: 18,
+                      borderColor: borderColor,
+                      borderWidth: 2.5,
+                      subtleShadow: false,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            phrase,
+                            style: AmodoroTheme.googleSans(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                              color: inkColor,
+                            ),
+                          ),
+                        ),
+                        AmodoroPressableButton(
+                          onTap: () => _removeReplyAt(i),
+                          color: cardBg,
+                          borderColor: borderColor,
+                          borderWidth: 1.5,
+                          lipColor: borderColor,
+                          lipHeight: 2.0,
+                          radius: 999,
+                          width: 38,
+                          height: 38,
+                          child: AmodoroTheme.sysIcon(
+                            Symbols.delete,
+                            size: 18,
+                            color: mutedColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 8),
+
+              // Botón GUARDAR CAMBIOS
+              AmodoroPressableButton(
+                onTap: _saving ? null : _saveSettings,
+                color: coralBg,
+                lipColor: coralLip,
+                lipHeight: 3.5,
+                radius: 999,
+                height: 50,
+                child: Text(
+                  _saving ? 'GUARDANDO...' : 'GUARDAR CAMBIOS',
+                  style: AmodoroTheme.googleSans(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        // ---------------------------------------------------------------------
+        // SECCIÓN 3: Emparejamiento y Código de Pareja
+        // ---------------------------------------------------------------------
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: AmodoroTheme.cardOutlineBox(
+            color: cardBg,
+            radius: 28,
+            borderColor: borderColor,
+            borderWidth: 2.5,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'VINCULACIÓN EN PAREJA',
+                style: AmodoroTheme.googleSans(
                   fontSize: 12,
-                  letterSpacing: 1.5,
-                  color: coralInk,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.1,
+                  color: inkColor,
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (!me.isPaired) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        decoration: AmodoroTheme.cardOutlineBox(
+                          color: fieldBg,
+                          radius: 18,
+                          borderColor: borderColor,
+                          borderWidth: 2.5,
+                          subtleShadow: false,
+                        ),
+                        child: TextField(
+                          controller: _pairCodeCtrl,
+                          textCapitalization: TextCapitalization.characters,
+                          style: AmodoroTheme.googleSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.4,
+                            color: inkColor,
+                          ),
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            hintText: 'Código de pareja',
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    AmodoroPressableButton(
+                      onTap: _pairingBusy ? null : _pairWithPartnerCode,
+                      color: coralBg,
+                      lipColor: coralLip,
+                      lipHeight: 3.0,
+                      radius: 999,
+                      height: 48,
+                      padding: const EdgeInsets.symmetric(horizontal: 18),
+                      child: Text(
+                        _pairingBusy ? '...' : 'VINCULAR',
+                        style: AmodoroTheme.googleSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.0,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+              ],
+              AmodoroPressableButton(
+                onTap: _generateInvite,
+                color: fieldBg,
+                borderColor: borderColor,
+                borderWidth: 1.5,
+                lipColor: borderColor,
+                lipHeight: 3.0,
+                radius: 999,
+                height: 48,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AmodoroTheme.sysIcon(
+                      Symbols.key,
+                      size: 18,
+                      color: inkColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'GENERAR CÓDIGO DE INVITACIÓN',
+                      style: AmodoroTheme.googleSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.1,
+                        color: inkColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_generatedInvite != null) ...[
+                const SizedBox(height: 12),
+                _buildCopyableCodeBox(
+                  label: 'CÓDIGO DE INVITACIÓN',
+                  code: _generatedInvite!,
+                  bgColor: const Color(0xFFFFDAD6),
+                  borderColor: const Color(0xFFD6574D),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        // ---------------------------------------------------------------------
+        // SECCIÓN 4: Seguridad y PIN de 4 dígitos (v1.5)
+        // ---------------------------------------------------------------------
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: AmodoroTheme.cardOutlineBox(
+            color: cardBg,
+            radius: 28,
+            borderColor: borderColor,
+            borderWidth: 2.5,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'SEGURIDAD Y PIN DE 4 DÍGITOS',
+                style: AmodoroTheme.googleSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.1,
+                  color: inkColor,
+                ),
+              ),
+              const SizedBox(height: 12),
+              AmodoroPressableButton(
+                onTap: _showChangePinSheet,
+                color: coralBg,
+                lipColor: coralLip,
+                lipHeight: 3.5,
+                radius: 999,
+                height: 50,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AmodoroTheme.sysIcon(
+                      Symbols.lock,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'CAMBIAR PIN DE 4 DÍGITOS',
+                      style: AmodoroTheme.googleSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.0,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_updatedRecoveryCode != null) ...[
+                const SizedBox(height: 12),
+                _buildCopyableCodeBox(
+                  label: 'TU NUEVO CÓDIGO DE RECUPERACIÓN (8 CARACTERES)',
+                  code: _updatedRecoveryCode!,
+                  bgColor: const Color(0xFFEADCF8),
+                  borderColor: const Color(0xFFB392DC),
+                ),
+              ],
+              const SizedBox(height: 12),
+              AmodoroPressableButton(
+                onTap: _generatePartnerResetCode,
+                color: fieldBg,
+                borderColor: borderColor,
+                borderWidth: 1.5,
+                lipColor: borderColor,
+                lipHeight: 3.0,
+                radius: 999,
+                constraints: const BoxConstraints(minHeight: 50),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AmodoroTheme.sysIcon(
+                      Symbols.favorite,
+                      size: 18,
+                      color: coralBg,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'GENERAR CÓDIGO PARA RECUPERAR PIN DE MI PAREJA',
+                        textAlign: TextAlign.center,
+                        style: AmodoroTheme.googleSans(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.9,
+                          color: inkColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_generatedPartnerResetCode != null) ...[
+                const SizedBox(height: 12),
+                _buildCopyableCodeBox(
+                  label: 'CÓDIGO PARA MI PAREJA (USAR EN "OLVIDÉ PIN")',
+                  code: _generatedPartnerResetCode!,
+                  bgColor: const Color(0xFFC8E7D1),
+                  borderColor: const Color(0xFF7BB38D),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        // ---------------------------------------------------------------------
+        // SECCIÓN 5: Mis Datos y Privacidad (v1.5)
+        // ---------------------------------------------------------------------
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: AmodoroTheme.cardOutlineBox(
+            color: cardBg,
+            radius: 28,
+            borderColor: borderColor,
+            borderWidth: 2.5,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'MIS DATOS Y PRIVACIDAD',
+                style: AmodoroTheme.googleSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.1,
+                  color: inkColor,
+                ),
+              ),
+              const SizedBox(height: 12),
+              AmodoroPressableButton(
+                onTap: _exportingBusy ? null : _exportMyDataJson,
+                color: fieldBg,
+                borderColor: borderColor,
+                borderWidth: 1.5,
+                lipColor: borderColor,
+                lipHeight: 3.0,
+                radius: 999,
+                height: 48,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AmodoroTheme.sysIcon(
+                      Symbols.download,
+                      size: 18,
+                      color: inkColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _exportingBusy
+                          ? 'EXPORTANDO...'
+                          : 'EXPORTAR MIS DATOS (JSON)',
+                      style: AmodoroTheme.googleSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.0,
+                        color: inkColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              AmodoroPressableButton(
+                onTap: _lockAppWithPin,
+                color: fieldBg,
+                borderColor: borderColor,
+                borderWidth: 1.5,
+                lipColor: borderColor,
+                lipHeight: 3.0,
+                radius: 999,
+                height: 48,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AmodoroTheme.sysIcon(
+                      Symbols.pin,
+                      size: 18,
+                      color: inkColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'BLOQUEAR APP (PEDIR PIN)',
+                      style: AmodoroTheme.googleSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.0,
+                        color: inkColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              AmodoroPressableButton(
+                onTap: _unlinkDevice,
+                color: const Color(0xFFFFDAD6),
+                borderColor: const Color(0xFFD6574D),
+                borderWidth: 1.5,
+                lipColor: const Color(0xFFD6574D),
+                lipHeight: 3.0,
+                radius: 999,
+                height: 48,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AmodoroTheme.sysIcon(
+                      Symbols.logout,
+                      size: 18,
+                      color: const Color(0xFF473A3A),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'DESVINCULAR ESTE DISPOSITIVO',
+                      style: AmodoroTheme.googleSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.0,
+                        color: const Color(0xFF473A3A),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildThemePill({
+    required String mode,
+    required String label,
+    required IconData icon,
+    required Color fieldBg,
+    required Color borderColor,
+    required Color coralBg,
+    required Color coralLip,
+    required Color inkColor,
+  }) {
+    final isSelected = _themeMode == mode;
+    return Expanded(
+      child: AmodoroPressableButton(
+        onTap: () {
+          setState(() {
+            _themeMode = mode;
+          });
+          widget.onThemeChanged?.call(mode);
+        },
+        color: isSelected ? coralBg : fieldBg,
+        borderColor: isSelected ? null : borderColor,
+        borderWidth: isSelected ? 0 : 1.5,
+        lipColor: isSelected ? coralLip : borderColor,
+        lipHeight: 3.0,
+        radius: 999,
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AmodoroTheme.sysIcon(
+              icon,
+              size: 16,
+              color: isSelected ? Colors.white : inkColor,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AmodoroTheme.googleSans(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.9,
+                  color: isSelected ? Colors.white : inkColor,
                 ),
               ),
             ),
-          ),
+          ],
         ),
-        const SizedBox(height: 16),
+      ),
+    );
+  }
 
-        // 8. Debajo: únicamente el botón de generar código de invitación
-        GestureDetector(
-          onTap: _generateInvite,
-          child: Container(
-            height: 48,
-            decoration: AmodoroTheme.floatingPerspectiveBox(
-              color: surface,
-              radius: 999,
-              thickness: 2.5,
+  Widget _buildCopyableCodeBox({
+    required String label,
+    required String code,
+    required Color bgColor,
+    required Color borderColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      decoration: AmodoroTheme.cardOutlineBox(
+        color: bgColor,
+        radius: 20,
+        borderColor: borderColor,
+        borderWidth: 2.5,
+        subtleShadow: false,
+      ),
+      child: Column(
+        children: [
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: AmodoroTheme.googleSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.0,
+              color: const Color(0xFF473A3A),
             ),
+          ),
+          const SizedBox(height: 8),
+          SelectableText(
+            code,
+            style: AmodoroTheme.googleSans(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 2.4,
+              color: const Color(0xFF473A3A),
+            ),
+          ),
+          const SizedBox(height: 10),
+          AmodoroPressableButton(
+            onTap: () async {
+              await Clipboard.setData(ClipboardData(text: code));
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Código $code copiado al portapapeles')),
+              );
+            },
+            color: Colors.white,
+            borderColor: borderColor,
+            borderWidth: 1.5,
+            lipColor: borderColor,
+            lipHeight: 2.8,
+            radius: 999,
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                AmodoroTheme.sysIcon(Symbols.key, size: 18),
+                AmodoroTheme.sysIcon(
+                  Symbols.content_copy,
+                  size: 18,
+                  color: const Color(0xFF473A3A),
+                ),
                 const SizedBox(width: 8),
-                const Text(
-                  'GENERAR CÓDIGO DE INVITACIÓN',
-                  style: TextStyle(
+                Text(
+                  'COPIAR',
+                  style: AmodoroTheme.googleSans(
                     fontSize: 12,
-                    letterSpacing: 1.4,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.0,
+                    color: const Color(0xFF473A3A),
                   ),
                 ),
               ],
             ),
           ),
-        ),
-        if (_generatedInvite != null) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
-            decoration: AmodoroTheme.floatingPerspectiveBox(
-              color: const Color(0xFFFFDAD6),
-              radius: 20,
-              thickness: 2.5,
-            ),
-            child: Center(
-              child: SelectableText(
-                _generatedInvite!,
-                style: const TextStyle(
-                  fontSize: 22,
-                  letterSpacing: 2.4,
-                  color: Color(0xFF1F1B18),
-                ),
-              ),
-            ),
-          ),
         ],
-        const SizedBox(height: 18),
-        Center(
-          child: GestureDetector(
-            onTap: widget.onLogout,
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: AmodoroTheme.sysIcon(
-                Symbols.logout,
-                size: 20,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

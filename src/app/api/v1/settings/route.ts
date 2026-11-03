@@ -1,5 +1,12 @@
-import { createInviteForUser, updateUserSettings } from "@/lib/auth";
+import {
+  createInviteForUser,
+  getPartnerUser,
+  updateUserFcmToken,
+  updateUserSettings,
+} from "@/lib/auth";
 import { CORS_HEADERS, getApiUser, jsonResponse } from "@/lib/api-auth";
+import { listBoardsWithItems, listCompletedBoardItems } from "@/lib/boards";
+import { getReceivedHomeCards, getSentHomeCards } from "@/lib/home-cards";
 import type { AccentPalette, AvatarId, ThemeMode } from "@/db/schema";
 
 export async function OPTIONS() {
@@ -14,7 +21,12 @@ export async function POST(request: Request) {
 
   try {
     const payload = (await request.json()) as {
-      action: "update_settings" | "create_invite";
+      action:
+        | "update_settings"
+        | "create_invite"
+        | "register_fcm_token"
+        | "generate_partner_pin_reset"
+        | "export_data";
       displayName?: string;
       avatarId?: AvatarId;
       partnerNickname?: string;
@@ -22,6 +34,7 @@ export async function POST(request: Request) {
       accentPalette?: AccentPalette;
       quickReplies?: string[];
       reactionEmojis?: string[];
+      fcmToken?: string | null;
     };
 
     if (payload.action === "update_settings") {
@@ -38,13 +51,49 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: true });
     }
 
-    if (payload.action === "create_invite") {
+    if (
+      payload.action === "create_invite" ||
+      payload.action === "generate_partner_pin_reset"
+    ) {
       const invite = createInviteForUser(user.id);
       return jsonResponse({
         ok: true,
         code: invite.code,
         token: invite.token,
         expiresAt: invite.expiresAt,
+      });
+    }
+
+    if (payload.action === "register_fcm_token") {
+      updateUserFcmToken(user.id, payload.fcmToken ?? null);
+      return jsonResponse({ ok: true });
+    }
+
+    if (payload.action === "export_data") {
+      const partner = getPartnerUser(user.id);
+      const { latest, history } = getReceivedHomeCards(user.id, { limit: 200 });
+      const sentCards = getSentHomeCards(user.id, { limit: 200 });
+      const { boards, itemsByBoardId } = listBoardsWithItems(user.id);
+      const completedHistory = listCompletedBoardItems(user.id);
+
+      return jsonResponse({
+        ok: true,
+        exportedAt: new Date().toISOString(),
+        exportData: {
+          profile: {
+            id: user.id,
+            username: user.username,
+            displayName: user.displayName,
+            avatarId: user.avatarId,
+            nicknameByPartner: user.nicknameByPartner,
+            partnerDisplayName: partner?.displayName ?? null,
+          },
+          receivedCards: [...(latest ? [latest] : []), ...history],
+          sentCards,
+          boards,
+          itemsByBoardId,
+          completedHistory,
+        },
       });
     }
 

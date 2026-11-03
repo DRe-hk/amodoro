@@ -1,6 +1,10 @@
 import { getAllUsers, getPartnerUser } from "@/lib/auth";
 import { CORS_HEADERS, getApiUser, jsonResponse } from "@/lib/api-auth";
-import { listBoardsWithItems } from "@/lib/boards";
+import {
+  listBoardsWithItems,
+  listCompletedBoardItems,
+  type BoardItemReactionRow,
+} from "@/lib/boards";
 import { getCurrentDecisionState } from "@/lib/decision";
 import {
   getReceivedHomeCards,
@@ -19,14 +23,29 @@ export async function GET(request: Request) {
     return jsonResponse({ ok: false, error: "UNAUTHORIZED" }, 401);
   }
 
+  let limit = 100;
+  let offset = 0;
+  try {
+    const { searchParams } = new URL(request.url);
+    const l = Number(searchParams.get("limit"));
+    const o = Number(searchParams.get("offset"));
+    if (Number.isInteger(l) && l > 0 && l <= 200) limit = l;
+    if (Number.isInteger(o) && o >= 0) offset = o;
+  } catch {
+    // keep defaults
+  }
+
   const allUsers = getAllUsers();
   const userById = new Map(allUsers.map((u) => [u.id, u]));
   const partner = getPartnerUser(user.id);
   const isPaired = Boolean(partner && user.partnerId);
 
-  const { latest, history } = getReceivedHomeCards(user.id);
-  const sentRaw = getSentHomeCards(user.id);
-  const { boards, itemsByBoardId, actividadesBoardId } = listBoardsWithItems();
+  const { latest, history } = getReceivedHomeCards(user.id, { limit, offset });
+  const sentRaw = getSentHomeCards(user.id, { limit, offset });
+  const { boards, itemsByBoardId, actividadesBoardId } = listBoardsWithItems(
+    user.id,
+  );
+  const completedRaw = listCompletedBoardItems(user.id);
   const decision = getCurrentDecisionState(user.id);
 
   let quickReplies: string[] = [
@@ -47,13 +66,40 @@ export async function GET(request: Request) {
 
   let reactionEmojis: string[] = ["❤️", "🥰", "🥺", "✨", "🔥", "🫶"];
   try {
-    const parsedEmojis = JSON.parse(user.reactionEmojisJson || '["❤️","🥰","🥺","✨","🔥","🫶"]');
+    const parsedEmojis = JSON.parse(
+      user.reactionEmojisJson || '["❤️","🥰","🥺","✨","🔥","🫶"]',
+    );
     if (Array.isArray(parsedEmojis) && parsedEmojis.length > 0) {
       reactionEmojis = parsedEmojis;
     }
   } catch {
     // keep default
   }
+
+  const serializeReaction = (r: {
+    id: number;
+    userId: number;
+    emoji: string | null;
+    presetText: string | null;
+    createdAt: Date;
+  }) => {
+    const rxAuthor = userById.get(r.userId);
+    return {
+      id: String(r.id),
+      userId: r.userId,
+      authorLabel: formatAuthorLabel({
+        authorId: r.userId,
+        viewerId: user.id,
+        authorNicknameGivenByPartner: rxAuthor?.nicknameByPartner,
+        authorDisplayName: rxAuthor?.displayName,
+        authorUsername: rxAuthor?.username,
+      }),
+      authorAvatarId: rxAuthor?.avatarId || "cat",
+      emoji: r.emoji,
+      presetText: r.presetText,
+      createdAt: r.createdAt.toISOString(),
+    };
+  };
 
   const serializeCard = (c: HydratedHomeCard) => {
     const authorLabel = formatAuthorLabel({
@@ -64,14 +110,13 @@ export async function GET(request: Request) {
       authorUsername: c.authorUsername,
     });
     const mediaUrl = c.mediaId ? `/api/media/${c.mediaId}` : null;
-    const resolvedType =
-      c.linkUrl
-        ? "link"
-        : c.mediaId
-          ? c.mediaType === "drawing"
-            ? "drawing"
-            : "photo"
-          : "none";
+    const resolvedType = c.linkUrl
+      ? "link"
+      : c.mediaId
+        ? c.mediaType === "drawing"
+          ? "drawing"
+          : "photo"
+        : "none";
 
     return {
       id: String(c.id),
@@ -83,6 +128,7 @@ export async function GET(request: Request) {
       dateHeader: formatSpanishDateHeader(c.createdAt),
       mediaType: resolvedType,
       mediaUrl,
+      altText: c.altText ?? null,
       linkUrl: c.linkUrl ?? null,
       linkTitle: c.linkTitle ?? null,
       linkThumbnail: c.linkThumbnail ?? null,
@@ -94,24 +140,7 @@ export async function GET(request: Request) {
       fontSize: c.fontSize,
       fontSizePx: c.fontSizePx || 18,
       createdAt: c.createdAt.toISOString(),
-      reactions: c.reactions.map((r) => {
-        const rxAuthor = userById.get(r.userId);
-        return {
-          id: String(r.id),
-          userId: r.userId,
-          authorLabel: formatAuthorLabel({
-            authorId: r.userId,
-            viewerId: user.id,
-            authorNicknameGivenByPartner: rxAuthor?.nicknameByPartner,
-            authorDisplayName: rxAuthor?.displayName,
-            authorUsername: rxAuthor?.username,
-          }),
-          authorAvatarId: rxAuthor?.avatarId || "cat",
-          emoji: r.emoji,
-          presetText: r.presetText,
-          createdAt: r.createdAt.toISOString(),
-        };
-      }),
+      reactions: c.reactions.map(serializeReaction),
     };
   };
 
@@ -128,7 +157,8 @@ export async function GET(request: Request) {
       slug: b.slug,
       title: b.title,
       icon: b.icon,
-      bgColor: b.bgColor || "#F4EFE8",
+      bgColor: b.bgColor || "#F27166",
+      sortOrder: b.sortOrder ?? 0,
       isSystem: b.isSystem,
       items: rawItems.map((item) => ({
         id: String(item.id),
@@ -153,11 +183,77 @@ export async function GET(request: Request) {
         mediaUrl: item.mediaId ? `/api/media/${item.mediaId}` : null,
         emoji: item.emoji ?? "",
         bgColor: item.bgColor || "#FFDAD6",
+        sortOrder: item.sortOrder ?? 0,
+        dueDate: item.dueDate ?? null,
         status: item.completedAt ? "completed" : "active",
         createdAt: item.createdAt.toISOString(),
+        reactions: item.reactions.map((r: BoardItemReactionRow) =>
+          serializeReaction(r),
+        ),
       })),
     };
   });
+
+  const completedHistory = completedRaw.map((item) => {
+    const completer = item.completedBy
+      ? userById.get(item.completedBy)
+      : undefined;
+    const completedDate = item.completedAt ?? item.createdAt;
+    const completionMediaUrl = item.completionMediaId
+      ? `/api/media/${item.completionMediaId}`
+      : item.mediaId
+        ? `/api/media/${item.mediaId}`
+        : null;
+
+    return {
+      id: String(item.id),
+      boardId: String(item.boardId),
+      categoryTag: item.categoryTag || "PENDIENTE",
+      title: item.title,
+      notes: item.notes ?? "",
+      emoji: item.emoji ?? "",
+      bgColor: item.bgColor || "#FFDAD6",
+      mediaUrl: item.mediaId ? `/api/media/${item.mediaId}` : null,
+      completionText: item.completionText ?? item.notes ?? "",
+      completionMediaUrl,
+      completedAt: completedDate.toISOString(),
+      completedDateHeader: formatSpanishDateHeader(completedDate),
+      completedByLabel: completer
+        ? formatAuthorLabel({
+            authorId: completer.id,
+            viewerId: user.id,
+            authorNicknameGivenByPartner: completer.nicknameByPartner,
+            authorDisplayName: completer.displayName,
+            authorUsername: completer.username,
+          })
+        : "YO",
+      completedByAvatarId: completer?.avatarId || "cat",
+      authorLabel: formatAuthorLabel({
+        authorId: item.addedBy,
+        viewerId: user.id,
+        authorNicknameGivenByPartner: item.addedByNickname,
+        authorDisplayName: item.addedByDisplayName,
+        authorUsername: item.addedByUsername,
+      }),
+      authorAvatarId: item.addedByAvatarId || "cat",
+      reactions: item.reactions.map((r: BoardItemReactionRow) =>
+        serializeReaction(r),
+      ),
+    };
+  });
+
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const pendingItems = itemsByBoardId[actividadesBoardId] ?? [];
+  const upcomingDueItems = Object.values(itemsByBoardId)
+    .flat()
+    .filter((i) => Boolean(i.dueDate))
+    .slice(0, 5)
+    .map((i) => ({
+      id: String(i.id),
+      title: i.title,
+      dueDate: i.dueDate,
+      categoryTag: i.categoryTag,
+    }));
 
   const partnerGivenNickname =
     partner?.nicknameByPartner?.trim() ||
@@ -177,6 +273,7 @@ export async function GET(request: Request) {
       displayName: myDisplayName,
       avatarId: user.avatarId || "cat",
       isPaired,
+      hasPin: Boolean(user.pinHash && user.pinHash.length > 0),
       nicknameByPartner: myNicknameByPartner,
       partnerNicknameGiven: partner?.nicknameByPartner?.trim() ?? "",
       themeMode: user.themeMode,
@@ -201,6 +298,14 @@ export async function GET(request: Request) {
       reactionEmojis,
     },
     boards: hydratedBoards,
+    completedHistory,
+    dailySummary: {
+      pendingCount: pendingItems.length,
+      completedTogetherCount: completedHistory.length,
+      receivedTodayCount: allReceived.filter((c) => c.dayKey === todayKey)
+        .length,
+      upcomingDueItems,
+    },
     actividadesBoardId: String(actividadesBoardId),
     decision: {
       activeVoting:

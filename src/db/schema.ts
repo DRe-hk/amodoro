@@ -37,6 +37,9 @@ export const users = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     username: text("username").notNull(),
     passwordHash: text("password_hash").notNull(),
+    pinHash: text("pin_hash").notNull().default(""),
+    recoveryCodeHash: text("recovery_code_hash").notNull().default(""),
+    fcmToken: text("fcm_token"),
     displayName: text("display_name").notNull().default(""),
     avatarId: text("avatar_id").notNull().default("cat"),
     partnerId: integer("partner_id"),
@@ -119,6 +122,7 @@ export const media = sqliteTable(
     bytes: integer("bytes").notNull(),
     width: integer("width"),
     height: integer("height"),
+    altText: text("alt_text"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
   (t) => [uniqueIndex("media_path_idx").on(t.path)],
@@ -135,6 +139,7 @@ export const homeCards = sqliteTable(
       onDelete: "set null",
     }),
     mediaType: text("media_type").notNull().default("none"),
+    altText: text("alt_text"),
     linkUrl: text("link_url"),
     linkTitle: text("link_title"),
     linkThumbnail: text("link_thumbnail"),
@@ -178,6 +183,7 @@ export const boards = sqliteTable(
     title: text("title").notNull(),
     icon: text("icon").notNull().default("sparkles"),
     bgColor: text("bg_color").notNull().default("#F4EFE8"),
+    sortOrder: integer("sort_order").notNull().default(0),
     isSystem: integer("is_system", { mode: "boolean" }).notNull().default(false),
     createdBy: integer("created_by").references(() => users.id, {
       onDelete: "set null",
@@ -206,14 +212,45 @@ export const boardItems = sqliteTable(
     mediaId: integer("media_id").references(() => media.id, {
       onDelete: "set null",
     }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    dueDate: text("due_date"),
     addedBy: integer("added_by")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     completedAt: integer("completed_at", { mode: "timestamp" }),
+    completedBy: integer("completed_by"),
+    completionText: text("completion_text"),
+    completionMediaId: integer("completion_media_id"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
   (t) => [index("board_items_board_idx").on(t.boardId)],
 );
+
+export const boardItemReactions = sqliteTable(
+  "board_item_reactions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    itemId: integer("item_id")
+      .notNull()
+      .references(() => boardItems.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    emoji: text("emoji"),
+    presetText: text("preset_text"),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  },
+  (t) => [index("board_item_reactions_item_idx").on(t.itemId)],
+);
+
+export const linkPreviewCache = sqliteTable("link_preview_cache", {
+  urlHash: text("url_hash").primaryKey(),
+  url: text("url").notNull(),
+  title: text("title").notNull(),
+  thumbnail: text("thumbnail"),
+  platform: text("platform").notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
 
 export const DECISION_MODES = ["roulette", "voting"] as const;
 export type DecisionMode = (typeof DECISION_MODES)[number];

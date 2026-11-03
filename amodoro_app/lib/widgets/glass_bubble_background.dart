@@ -40,14 +40,20 @@ typedef SunflowerWindBackground = GlassBubbleBackground;
 class _GlassBubbleBackgroundState extends State<GlassBubbleBackground>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+  late final Animation<double> _curvedAnimation;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 12),
-    )..repeat();
+      duration: const Duration(seconds: 10),
+    )..repeat(reverse: true);
+    _curvedAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOutSine,
+      reverseCurve: Curves.easeInOutSine,
+    );
   }
 
   @override
@@ -77,12 +83,12 @@ class _GlassBubbleBackgroundState extends State<GlassBubbleBackground>
             RepaintBoundary(
               child: IgnorePointer(
                 child: AnimatedBuilder(
-                  animation: _controller,
+                  animation: _curvedAnimation,
                   builder: (context, _) {
                     return CustomPaint(
                       size: Size(screenWidth, screenHeight),
-                      painter: _SunflowerWindPainter(
-                        animationProgress: _controller.value,
+                      painter: _Sunflowers25DPainter(
+                        animationProgress: _curvedAnimation.value,
                         isDark: isDark,
                         emergeFromBottom: widget.emergeFromBottom,
                         bubbleSize: widget.bubbleSize,
@@ -164,13 +170,13 @@ class _PollenSpec {
 }
 
 /// Custom painter rendering the 2.5D swaying sunflower meadow.
-class _SunflowerWindPainter extends CustomPainter {
+class _Sunflowers25DPainter extends CustomPainter {
   final double animationProgress; // 0.0 to 1.0
   final bool isDark;
   final bool emergeFromBottom;
   final double bubbleSize;
 
-  const _SunflowerWindPainter({
+  const _Sunflowers25DPainter({
     required this.animationProgress,
     required this.isDark,
     required this.emergeFromBottom,
@@ -342,6 +348,8 @@ class _SunflowerWindPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+
     final w = size.width;
     final h = size.height;
     final t = animationProgress;
@@ -349,6 +357,9 @@ class _SunflowerWindPainter extends CustomPainter {
     // Scale multiplier based on bubbleSize prop
     final scaleMultiplier = (bubbleSize / 310.0).clamp(0.85, 1.35);
     final emergenceFactor = emergeFromBottom ? 1.06 : 1.0;
+
+    // 0. Base canvas background gradient (Neo-Pastel warm cream #FAF8F5 in light mode)
+    _drawBackground(canvas, size);
 
     // 1. Back Rolling Meadow Hill
     _drawBackHill(canvas, size);
@@ -810,6 +821,42 @@ class _SunflowerWindPainter extends CustomPainter {
       );
   }
 
+  /// Draws the base canvas background gradient.
+  /// In Light mode: matches the Neo-Pastel warm cream (#FAF8F5) at the top,
+  /// blending softly into warm meadow tones at the bottom.
+  /// In Dark mode: deep nocturnal meadow twilight gradient.
+  void _drawBackground(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final Paint bgPaint = Paint();
+
+    if (isDark) {
+      bgPaint.shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color(0xFF0F1510),
+          Color(0xFF131D14),
+          Color(0xFF172418),
+        ],
+        stops: [0.0, 0.60, 1.0],
+      ).createShader(rect);
+    } else {
+      bgPaint.shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color(0xFFFAF8F5), // Neo-Pastel warm cream
+          Color(0xFFF7F3EB), // Soft warm transition
+          Color(0xFFEFF5E6), // Pale sunny meadow tint
+          Color(0xFFE2EBD5), // Warm meadow base
+        ],
+        stops: [0.0, 0.45, 0.75, 1.0],
+      ).createShader(rect);
+    }
+
+    canvas.drawRect(rect, bgPaint);
+  }
+
   /// Draws the back rolling meadow hill.
   void _drawBackHill(Canvas canvas, Size size) {
     final w = size.width;
@@ -928,8 +975,11 @@ class _SunflowerWindPainter extends CustomPainter {
     final h = size.height;
 
     for (final p in _pollenParticles) {
-      // Drift horizontally across the width
-      final px = ((p.xRatio + t * p.speedX) % 1.0) * w;
+      // Continuous back-and-forth horizontal drift with the breeze (no modulo wrapping)
+      final driftX = (t - 0.5) * (w * 0.10) * (p.speedX / 0.40);
+      final waveX = math.sin(t * 2 * math.pi + p.phase) * 8.0;
+      final px = (p.xRatio * w) + driftX + waveX;
+
       // Sinusoidal bobbing in the wind
       final py = (p.yRatio * h) +
           math.sin(t * 2 * math.pi * p.bobFreq + p.phase) * p.bobAmp +
@@ -952,10 +1002,13 @@ class _SunflowerWindPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _SunflowerWindPainter oldDelegate) {
+  bool shouldRepaint(covariant _Sunflowers25DPainter oldDelegate) {
     return oldDelegate.animationProgress != animationProgress ||
         oldDelegate.isDark != isDark ||
         oldDelegate.emergeFromBottom != emergeFromBottom ||
         oldDelegate.bubbleSize != bubbleSize;
   }
 }
+
+/// Semantic alias for backward compatibility.
+typedef _SunflowerWindPainter = _Sunflowers25DPainter;

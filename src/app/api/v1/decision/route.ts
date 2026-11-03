@@ -5,6 +5,7 @@ import {
   startVotingDecision,
   submitVotingRoundChoices,
 } from "@/lib/decision";
+import { sendPushToPartner } from "@/lib/push";
 
 export async function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -26,6 +27,13 @@ export async function POST(request: Request) {
 
     if (payload.action === "roulette") {
       const decision = spinRouletteDecision();
+      if (decision?.winner) {
+        void sendPushToPartner(user.id, {
+          title: "¡La Ruleta decidió! 🎲",
+          body: decision.winner.title,
+          data: { type: "decision_resolved", sessionId: String(decision.id) },
+        });
+      }
       return jsonResponse({
         ok: true,
         decision,
@@ -35,6 +43,13 @@ export async function POST(request: Request) {
 
     if (payload.action === "start_voting") {
       const decision = startVotingDecision(5);
+      if (decision) {
+        void sendPushToPartner(user.id, {
+          title: "¡Votación secreta activa! 🗳️",
+          body: "Elige tus actividades favoritas para hoy.",
+          data: { type: "decision_voting", sessionId: String(decision.id) },
+        });
+      }
       return jsonResponse({
         ok: true,
         decision,
@@ -68,6 +83,14 @@ export async function POST(request: Request) {
           : (decision?.roundNumber ?? 1) > prevRound
             ? "tie_next_round"
             : "waiting_partner";
+
+      if (status === "resolved" && decision?.winner) {
+        void sendPushToPartner(user.id, {
+          title: "¡Hay acuerdo! 🎉",
+          body: decision.winner.title,
+          data: { type: "decision_resolved", sessionId: String(decision.id) },
+        });
+      }
 
       return jsonResponse({
         ok: true,

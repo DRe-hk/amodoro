@@ -27,6 +27,7 @@ class UserProfile {
   final String displayName;
   final String avatarId;
   final bool isPaired;
+  final bool hasPin;
   final String nicknameByPartner;
   final String partnerNicknameGiven;
   final String themeMode;
@@ -40,6 +41,7 @@ class UserProfile {
     required this.displayName,
     required this.avatarId,
     required this.isPaired,
+    this.hasPin = false,
     required this.nicknameByPartner,
     required this.partnerNicknameGiven,
     required this.themeMode,
@@ -60,6 +62,7 @@ class UserProfile {
       displayName: dname.isNotEmpty ? dname : uname,
       avatarId: (json['avatarId'] ?? 'cat').toString(),
       isPaired: json['isPaired'] == true,
+      hasPin: json['hasPin'] == true,
       nicknameByPartner: nickByPartner.isNotEmpty
           ? nickByPartner
           : (dname.isNotEmpty ? dname : uname),
@@ -72,6 +75,49 @@ class UserProfile {
       reactionEmojis: rawEmojis is List && rawEmojis.isNotEmpty
           ? rawEmojis.map((e) => e.toString()).toList()
           : const ['❤️', '🥰', '🥺', '✨', '🔥', '🫶'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'username': username,
+      'displayName': displayName,
+      'avatarId': avatarId,
+      'isPaired': isPaired,
+      'hasPin': hasPin,
+      'nicknameByPartner': nicknameByPartner,
+      'partnerNicknameGiven': partnerNicknameGiven,
+      'themeMode': themeMode,
+      'accentPalette': accentPalette,
+      'quickReplies': quickReplies,
+      'reactionEmojis': reactionEmojis,
+    };
+  }
+}
+
+class AuthStatusResponse {
+  final int serverUserCount;
+  final bool maxUsersReached;
+  final UserProfile? authenticatedUser;
+
+  const AuthStatusResponse({
+    required this.serverUserCount,
+    required this.maxUsersReached,
+    this.authenticatedUser,
+  });
+
+  factory AuthStatusResponse.fromJson(Map<String, dynamic> json) {
+    final rawAuthUser = json['authenticatedUser'];
+    final rawProfiles = json['profiles'];
+    final count = (json['serverUserCount'] as num?)?.toInt() ??
+        (rawProfiles is List ? rawProfiles.length : 0);
+    return AuthStatusResponse(
+      serverUserCount: count,
+      maxUsersReached: json['maxUsersReached'] == true || count >= 2,
+      authenticatedUser: rawAuthUser is Map<String, dynamic>
+          ? UserProfile.fromJson(rawAuthUser)
+          : null,
     );
   }
 }
@@ -151,6 +197,7 @@ class HomeCardItem {
   final String dateHeader;
   final String mediaType;
   final String? mediaUrl;
+  final String? altText;
   final String? linkUrl;
   final String? linkTitle;
   final String? linkThumbnail;
@@ -173,6 +220,7 @@ class HomeCardItem {
     required this.dateHeader,
     required this.mediaType,
     this.mediaUrl,
+    this.altText,
     this.linkUrl,
     this.linkTitle,
     this.linkThumbnail,
@@ -198,6 +246,7 @@ class HomeCardItem {
       dateHeader: (json['dateHeader'] ?? 'HOY').toString(),
       mediaType: (json['mediaType'] ?? 'none').toString(),
       mediaUrl: json['mediaUrl']?.toString(),
+      altText: json['altText']?.toString(),
       linkUrl: json['linkUrl']?.toString(),
       linkTitle: json['linkTitle']?.toString(),
       linkThumbnail: json['linkThumbnail']?.toString(),
@@ -233,10 +282,14 @@ class BoardCardItem {
   final String? linkThumbnail;
   final String? linkPlatform;
   final String? mediaUrl;
+  final String? altText;
+  final String? dueDate;
+  final int sortOrder;
   final String emoji;
   final String bgColor;
   final String status;
   final String createdAt;
+  final List<ReactionItem> reactions;
 
   const BoardCardItem({
     required this.id,
@@ -253,13 +306,18 @@ class BoardCardItem {
     this.linkThumbnail,
     this.linkPlatform,
     this.mediaUrl,
+    this.altText,
+    this.dueDate,
+    this.sortOrder = 0,
     required this.emoji,
     required this.bgColor,
     required this.status,
     required this.createdAt,
+    this.reactions = const [],
   });
 
   factory BoardCardItem.fromJson(Map<String, dynamic> json) {
+    final rawReactions = json['reactions'];
     return BoardCardItem(
       id: (json['id'] ?? '').toString(),
       boardId: (json['boardId'] ?? '').toString(),
@@ -275,10 +333,108 @@ class BoardCardItem {
       linkThumbnail: json['linkThumbnail']?.toString(),
       linkPlatform: json['linkPlatform']?.toString(),
       mediaUrl: json['mediaUrl']?.toString(),
+      altText: json['altText']?.toString(),
+      dueDate: json['dueDate']?.toString(),
+      sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
       emoji: (json['emoji'] ?? '').toString(),
       bgColor: (json['bgColor'] ?? '#FFDAD6').toString(),
       status: (json['status'] ?? 'active').toString(),
       createdAt: (json['createdAt'] ?? '').toString(),
+      reactions: rawReactions is List
+          ? rawReactions
+              .whereType<Map<String, dynamic>>()
+              .map(ReactionItem.fromJson)
+              .toList()
+          : const [],
+    );
+  }
+}
+
+class CompletedActivityItem {
+  final String id;
+  final String boardId;
+  final String categoryTag;
+  final String title;
+  final String notes;
+  final String emoji;
+  final String bgColor;
+  final String? mediaUrl;
+  final String? completionText;
+  final String? completionMediaUrl;
+  final String completedAt;
+  final String completedDateHeader;
+  final String completedByLabel;
+  final String completedByAvatarId;
+  final String authorLabel;
+  final String authorAvatarId;
+  final List<ReactionItem> reactions;
+
+  const CompletedActivityItem({
+    required this.id,
+    required this.boardId,
+    required this.categoryTag,
+    required this.title,
+    required this.notes,
+    required this.emoji,
+    required this.bgColor,
+    this.mediaUrl,
+    this.completionText,
+    this.completionMediaUrl,
+    required this.completedAt,
+    required this.completedDateHeader,
+    required this.completedByLabel,
+    required this.completedByAvatarId,
+    required this.authorLabel,
+    required this.authorAvatarId,
+    this.reactions = const [],
+  });
+
+  factory CompletedActivityItem.fromJson(Map<String, dynamic> json) {
+    final rawReactions = json['reactions'];
+    return CompletedActivityItem(
+      id: (json['id'] ?? '').toString(),
+      boardId: (json['boardId'] ?? '').toString(),
+      categoryTag: (json['categoryTag'] ?? 'PENDIENTE').toString(),
+      title: (json['title'] ?? '').toString(),
+      notes: (json['notes'] ?? '').toString(),
+      emoji: (json['emoji'] ?? '').toString(),
+      bgColor: (json['bgColor'] ?? '#FFDAD6').toString(),
+      mediaUrl: json['mediaUrl']?.toString(),
+      completionText: json['completionText']?.toString(),
+      completionMediaUrl: json['completionMediaUrl']?.toString(),
+      completedAt: (json['completedAt'] ?? '').toString(),
+      completedDateHeader: (json['completedDateHeader'] ?? 'HOY').toString(),
+      completedByLabel: (json['completedByLabel'] ?? 'YO').toString(),
+      completedByAvatarId: (json['completedByAvatarId'] ?? 'cat').toString(),
+      authorLabel: (json['authorLabel'] ?? 'YO').toString(),
+      authorAvatarId: (json['authorAvatarId'] ?? 'cat').toString(),
+      reactions: rawReactions is List
+          ? rawReactions
+              .whereType<Map<String, dynamic>>()
+              .map(ReactionItem.fromJson)
+              .toList()
+          : const [],
+    );
+  }
+}
+
+class DailySummaryModel {
+  final int pendingCount;
+  final int completedTogetherCount;
+  final int receivedTodayCount;
+
+  const DailySummaryModel({
+    required this.pendingCount,
+    required this.completedTogetherCount,
+    required this.receivedTodayCount,
+  });
+
+  factory DailySummaryModel.fromJson(Map<String, dynamic> json) {
+    return DailySummaryModel(
+      pendingCount: (json['pendingCount'] as num?)?.toInt() ?? 0,
+      completedTogetherCount:
+          (json['completedTogetherCount'] as num?)?.toInt() ?? 0,
+      receivedTodayCount: (json['receivedTodayCount'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -290,6 +446,7 @@ class BoardModel {
   final String icon;
   final String bgColor;
   final bool isSystem;
+  final int sortOrder;
   final List<BoardCardItem> items;
 
   const BoardModel({
@@ -299,6 +456,7 @@ class BoardModel {
     required this.icon,
     required this.bgColor,
     required this.isSystem,
+    this.sortOrder = 0,
     required this.items,
   });
 
@@ -309,8 +467,9 @@ class BoardModel {
       slug: (json['slug'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
       icon: (json['icon'] ?? 'schedule').toString(),
-      bgColor: (json['bgColor'] ?? '#F4EFE8').toString(),
+      bgColor: (json['bgColor'] ?? '#F27166').toString(),
       isSystem: json['isSystem'] == true,
+      sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
       items: rawItems is List
           ? rawItems
               .whereType<Map<String, dynamic>>()
@@ -435,9 +594,12 @@ class SyncPayload {
   final List<String> quickReplies;
   final List<String> reactionEmojis;
   final List<BoardModel> boards;
+  final List<CompletedActivityItem> completedHistory;
+  final DailySummaryModel? dailySummary;
   final String actividadesBoardId;
   final ActiveVotingState? activeVoting;
   final LatestResolvedState? latestResolved;
+  final bool isOffline;
 
   const SyncPayload({
     required this.me,
@@ -448,17 +610,44 @@ class SyncPayload {
     required this.quickReplies,
     required this.reactionEmojis,
     required this.boards,
+    this.completedHistory = const [],
+    this.dailySummary,
     required this.actividadesBoardId,
     this.activeVoting,
     this.latestResolved,
+    this.isOffline = false,
   });
 
-  factory SyncPayload.fromJson(Map<String, dynamic> json) {
+  SyncPayload copyWith({bool? isOffline}) {
+    return SyncPayload(
+      me: me,
+      partner: partner,
+      latestPartnerCard: latestPartnerCard,
+      receivedHistory: receivedHistory,
+      sentHistory: sentHistory,
+      quickReplies: quickReplies,
+      reactionEmojis: reactionEmojis,
+      boards: boards,
+      completedHistory: completedHistory,
+      dailySummary: dailySummary,
+      actividadesBoardId: actividadesBoardId,
+      activeVoting: activeVoting,
+      latestResolved: latestResolved,
+      isOffline: isOffline ?? this.isOffline,
+    );
+  }
+
+  factory SyncPayload.fromJson(
+    Map<String, dynamic> json, {
+    bool isOffline = false,
+  }) {
     final meMap = (json['me'] as Map<String, dynamic>?) ?? {};
     final partnerMap = json['partner'] as Map<String, dynamic>?;
     final homeMap = (json['home'] as Map<String, dynamic>?) ?? {};
     final decisionMap = (json['decision'] as Map<String, dynamic>?) ?? {};
     final rawBoards = json['boards'];
+    final rawCompleted = json['completedHistory'];
+    final rawSummary = json['dailySummary'];
     final rawReceived = homeMap['receivedHistory'];
     final rawSent = homeMap['sentHistory'];
     final rawReplies = homeMap['quickReplies'];
@@ -498,6 +687,15 @@ class SyncPayload {
               .map(BoardModel.fromJson)
               .toList()
           : const [],
+      completedHistory: rawCompleted is List
+          ? rawCompleted
+              .whereType<Map<String, dynamic>>()
+              .map(CompletedActivityItem.fromJson)
+              .toList()
+          : const [],
+      dailySummary: rawSummary is Map<String, dynamic>
+          ? DailySummaryModel.fromJson(rawSummary)
+          : null,
       actividadesBoardId: (json['actividadesBoardId'] ?? '1').toString(),
       activeVoting: activeVotingMap is Map<String, dynamic>
           ? ActiveVotingState.fromJson(activeVotingMap)
@@ -505,6 +703,7 @@ class SyncPayload {
       latestResolved: latestResolvedMap is Map<String, dynamic>
           ? LatestResolvedState.fromJson(latestResolvedMap)
           : null,
+      isOffline: isOffline || json['isOffline'] == true,
     );
   }
 }

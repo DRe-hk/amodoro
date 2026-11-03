@@ -1,82 +1,66 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'models/amodoro_models.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_shell.dart';
 import 'services/api_client.dart';
 import 'theme/amodoro_theme.dart';
 
-void main() async {
+typedef AmodoroApp = AmodoroRootApp;
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final api = AmodoroApiClient();
-  await api.init();
-  runApp(AmodoroApp(api: api));
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {
+    // Allows running in unit/widget tests or environments without google-services.json
+  }
+  final apiClient = AmodoroApiClient();
+  await apiClient.init();
+  runApp(AmodoroRootApp(api: apiClient));
 }
 
-class AmodoroApp extends StatefulWidget {
+class AmodoroRootApp extends StatefulWidget {
   final AmodoroApiClient api;
 
-  const AmodoroApp({super.key, required this.api});
+  const AmodoroRootApp({super.key, required this.api});
 
   @override
-  State<AmodoroApp> createState() => _AmodoroAppState();
+  State<AmodoroRootApp> createState() => _AmodoroRootAppState();
 }
 
-class _AmodoroAppState extends State<AmodoroApp> {
-  SyncPayload? _sync;
-  bool _loading = false;
-  String? _error;
+class _AmodoroRootAppState extends State<AmodoroRootApp> {
+  late ThemeMode _themeMode;
 
   @override
   void initState() {
     super.initState();
-    if (widget.api.isAuthenticated) {
-      _loadSync();
+    _themeMode = _parseThemeMode(widget.api.rememberedUser?.themeMode);
+  }
+
+  ThemeMode _parseThemeMode(String? mode) {
+    switch (mode?.toLowerCase().trim()) {
+      case 'dark':
+        return ThemeMode.dark;
+      case 'light':
+        return ThemeMode.light;
+      case 'system':
+      case 'auto':
+      default:
+        return ThemeMode.system;
     }
   }
 
-  Future<void> _loadSync() async {
-    if (!widget.api.isAuthenticated) return;
-    if (_sync == null) {
+  void _updateThemeMode(String mode) {
+    final nextMode = _parseThemeMode(mode);
+    if (mounted && _themeMode != nextMode) {
       setState(() {
-        _loading = true;
-        _error = null;
-      });
-    }
-    try {
-      final data = await widget.api.fetchSync();
-      if (mounted) {
-        setState(() {
-          _sync = data;
-          _loading = false;
-          _error = null;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = e.toString();
-        });
-      }
-    }
-  }
-
-  Future<void> _handleLogout() async {
-    await widget.api.logout();
-    if (mounted) {
-      setState(() {
-        _sync = null;
-        _error = null;
+        _themeMode = nextMode;
       });
     }
   }
 
-  ThemeMode _resolveThemeMode() {
-    final mode = _sync?.me.themeMode ?? 'system';
-    if (mode == 'dark') return ThemeMode.dark;
-    if (mode == 'light') return ThemeMode.light;
-    return ThemeMode.system;
-  }
+  bool get _authenticated =>
+      widget.api.isAuthenticated && widget.api.isPinUnlocked;
 
   @override
   Widget build(BuildContext context) {
@@ -85,42 +69,25 @@ class _AmodoroAppState extends State<AmodoroApp> {
       debugShowCheckedModeBanner: false,
       theme: AmodoroTheme.lightTheme(),
       darkTheme: AmodoroTheme.darkTheme(),
-      themeMode: _resolveThemeMode(),
-      home: _buildHome(),
-    );
-  }
-
-  Widget _buildHome() {
-    if (!widget.api.isAuthenticated) {
-      return LoginScreen(
-        api: widget.api,
-        onLoggedIn: _loadSync,
-      );
-    }
-
-    if (_loading && _sync == null) {
-      return Scaffold(
-        body: Center(
-          child: Text(
-            'amodoro',
-            style: AmodoroTheme.logoStyle(fontSize: 36),
-          ),
-        ),
-      );
-    }
-
-    if (_error != null && _sync == null) {
-      return LoginScreen(
-        api: widget.api,
-        onLoggedIn: _loadSync,
-      );
-    }
-
-    return MainShell(
-      api: widget.api,
-      sync: _sync!,
-      onRefresh: _loadSync,
-      onLogout: _handleLogout,
+      themeMode: _themeMode,
+      home: _authenticated
+          ? MainShell(
+              api: widget.api,
+              onThemeChanged: _updateThemeMode,
+              onLogout: () => setState(() {
+                widget.api.isPinUnlocked = false;
+              }),
+            )
+          : LoginScreen(
+              api: widget.api,
+              onAuthenticated: () => setState(() {
+                widget.api.isPinUnlocked = true;
+                final rememberedMode = widget.api.rememberedUser?.themeMode;
+                if (rememberedMode != null) {
+                  _themeMode = _parseThemeMode(rememberedMode);
+                }
+              }),
+            ),
     );
   }
 }
