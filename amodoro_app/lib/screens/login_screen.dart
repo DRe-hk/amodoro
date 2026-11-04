@@ -124,14 +124,6 @@ class _LoginScreenState extends State<LoginScreen> {
         _nameController.selection = TextSelection.fromPosition(
           TextPosition(offset: _nameController.text.length),
         );
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🐾 ¡Miau! Zafiro desbloqueó su gatito gris especial ✨'),
-            duration: Duration(seconds: 3),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
       }
     });
   }
@@ -849,30 +841,6 @@ class _LoginScreenState extends State<LoginScreen> {
             }).toList(),
           ),
           const SizedBox(height: 16),
-
-          // Easter Egg "zafiro" banner for BOTH Persona 1 and Persona 2
-          if (_isZafiroEasterEgg) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: AmodoroTheme.cardOutlineBox(
-                color: const Color(0xFFEADCF8),
-                radius: 18,
-                borderColor: const Color(0xFFB392DC),
-                borderWidth: 2.5,
-                subtleShadow: false,
-              ),
-              child: Text(
-                '🐾 ¡Miau! Zafiro desbloqueó su gatito gris especial ✨',
-                textAlign: TextAlign.center,
-                style: AmodoroTheme.googleSans(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF473A3A),
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
-          ],
 
           // Tu nombre input (border-only 2.5px)
           Container(

@@ -113,14 +113,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _myDisplayNameCtrl.selection = TextSelection.fromPosition(
           TextPosition(offset: _myDisplayNameCtrl.text.length),
         );
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🐾 ¡Miau! Zafiro desbloqueó su gatito gris especial ✨'),
-            duration: Duration(seconds: 3),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
       }
     });
   }
@@ -689,32 +681,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   );
                 }).toList(),
               ),
-
-              if (_isZafiroEasterEgg) ...[
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: AmodoroTheme.cardOutlineBox(
-                    color: const Color(0xFFEADCF8),
-                    radius: 18,
-                    borderColor: const Color(0xFFB392DC),
-                    borderWidth: 2.5,
-                    subtleShadow: false,
-                  ),
-                  child: Text(
-                    '🐾 ¡Miau! Zafiro desbloqueó su gatito gris especial ✨',
-                    textAlign: TextAlign.center,
-                    style: AmodoroTheme.googleSans(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF473A3A),
-                    ),
-                  ),
-                ),
-              ],
               const SizedBox(height: 16),
 
               // Input Tu nombre (cardOutlineBox borderWidth: 2.5, NO 3D lip)
