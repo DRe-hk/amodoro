@@ -34,4 +34,6 @@ amodoro_app/.flutter-plugins
 amodoro_app/.flutter-plugins-dependencies
 amodoro_app/.packages
 *.apk
+*google-services.json
+*firebase-adminsdk*.json
 

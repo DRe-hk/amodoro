@@ -29,25 +29,34 @@ jobs:
 
       - name: Generate platform directories, configure Firebase, Share Intent, Manifest & Coral "a" icon
         working-directory: amodoro_app
+        env:
+          GOOGLE_SERVICES_JSON_SECRET: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
           mkdir -p assets/avatars
           flutter create . --project-name amodoro_app --org com.amodoro --platforms android,ios,web
           pip3 install --quiet Pillow
           curl -sL "https://raw.githubusercontent.com/google/fonts/main/ofl/playwriteustradguides/PlaywriteUSTradGuides-Regular.ttf" -o /tmp/PlaywriteUSTradGuides-Regular.ttf
           python3 - << 'PY'
+          import os
           import re
           import shutil
           from pathlib import Path
           from PIL import Image, ImageDraw, ImageFont
 
-          # 0. Copy google-services.json into android/app/google-services.json
+          # 0. Write or copy google-services.json into android/app/google-services.json
+          gs_secret = os.environ.get("GOOGLE_SERVICES_JSON_SECRET", "").strip()
           gs_src = Path("android/google-services.json")
           gs_dst = Path("android/app/google-services.json")
-          if gs_src.exists():
+          if gs_secret:
+              gs_dst.parent.mkdir(parents=True, exist_ok=True)
+              gs_dst.write_text(gs_secret, encoding="utf-8")
+              print("Injected google-services.json from GitHub Secrets into android/app/google-services.json")
+          elif gs_src.exists():
+              gs_dst.parent.mkdir(parents=True, exist_ok=True)
               shutil.copy(gs_src, gs_dst)
               print("Copied android/google-services.json -> android/app/google-services.json")
           else:
-              raise FileNotFoundError("Missing android/google-services.json")
+              raise FileNotFoundError("Missing google-services.json (not found in secrets or android/google-services.json)")
 
           # 1. Configure Gradle for Google Services (4.5.0) and Firebase BoM (35.1.0) + minSdk 23
           settings_kts = Path("android/settings.gradle.kts")
