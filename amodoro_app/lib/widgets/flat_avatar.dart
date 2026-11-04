@@ -19,19 +19,13 @@ class FlatAvatarOption {
 /// Alias for [FlatAvatarOption].
 typedef AvatarOption = FlatAvatarOption;
 
-/// The 5 predefined flat animal avatars in Amodoro.
+/// The 8 predefined flat animal avatars in Amodoro.
 const List<FlatAvatarOption> kFlatAvatars = [
   FlatAvatarOption(
     id: 'cat',
     label: 'Gato',
     background: Color(0xFFF5E0B5),
     primary: Color(0xFF232328),
-  ),
-  FlatAvatarOption(
-    id: 'hippo',
-    label: 'Hipopótamo',
-    background: Color(0xFFE8DEF8),
-    primary: Color(0xFF8C7AA9),
   ),
   FlatAvatarOption(
     id: 'dog',
@@ -46,10 +40,40 @@ const List<FlatAvatarOption> kFlatAvatars = [
     primary: Color(0xFFE899AD),
   ),
   FlatAvatarOption(
+    id: 'bear',
+    label: 'Oso',
+    background: Color(0xFFEADBCE),
+    primary: Color(0xFF704E37),
+  ),
+  FlatAvatarOption(
+    id: 'fox',
+    label: 'Zorro',
+    background: Color(0xFFFFD6C2),
+    primary: Color(0xFFE65100),
+  ),
+  FlatAvatarOption(
+    id: 'panda',
+    label: 'Panda',
+    background: Color(0xFFE2E6E8),
+    primary: Color(0xFF1F2937),
+  ),
+  FlatAvatarOption(
+    id: 'chick',
+    label: 'Pollito',
+    background: Color(0xFFFFF2B2),
+    primary: Color(0xFFF59E0B),
+  ),
+  FlatAvatarOption(
     id: 'gray_kitten',
     label: 'Gatito gris',
     background: Color(0xFFD3E4FF),
     primary: Color(0xFF8D99AE),
+  ),
+  FlatAvatarOption(
+    id: 'hippo',
+    label: 'Hipopótamo',
+    background: Color(0xFFE8DEF8),
+    primary: Color(0xFF8C7AA9),
   ),
 ];
 
@@ -57,7 +81,12 @@ const List<FlatAvatarOption> kFlatAvatars = [
 FlatAvatarOption flatAvatarFor(String id) {
   return kFlatAvatars.firstWhere(
     (a) => a.id == id,
-    orElse: () => kFlatAvatars.first,
+    orElse: () => FlatAvatarOption(
+      id: id,
+      label: id,
+      background: const Color(0xFFF5E0B5),
+      primary: const Color(0xFF232328),
+    ),
   );
 }
 
@@ -107,7 +136,7 @@ class FlatAvatarBadge extends StatelessWidget {
       decoration: decoration,
       child: ClipOval(
         child: Image.asset(
-          'assets/avatars/${preset.id}.png',
+          'assets/avatars/$avatarId.png',
           width: size,
           height: size,
           fit: BoxFit.cover,

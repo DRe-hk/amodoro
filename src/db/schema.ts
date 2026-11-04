@@ -24,10 +24,14 @@ export type CardFontSize = (typeof CARD_FONT_SIZES)[number];
 
 export const AVATAR_IDS = [
   "cat",
-  "hippo",
   "dog",
   "rabbit",
+  "bear",
+  "fox",
+  "panda",
+  "chick",
   "gray_kitten",
+  "hippo",
 ] as const;
 export type AvatarId = (typeof AVATAR_IDS)[number];
 

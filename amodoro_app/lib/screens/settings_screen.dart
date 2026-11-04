@@ -113,6 +113,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _myDisplayNameCtrl.selection = TextSelection.fromPosition(
           TextPosition(offset: _myDisplayNameCtrl.text.length),
         );
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🐾 ¡Miau! Zafiro desbloqueó su gatito gris especial ✨'),
+            duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     });
   }

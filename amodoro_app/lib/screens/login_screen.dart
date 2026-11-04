@@ -119,10 +119,18 @@ class _LoginScreenState extends State<LoginScreen> {
   void _onSelectAvatar(String avatarId) {
     setState(() {
       _selectedAvatarId = avatarId;
-      if (avatarId == 'gray_kitten' && _nameController.text.trim().isEmpty) {
+      if (avatarId == 'gray_kitten') {
         _nameController.text = 'zafiro';
         _nameController.selection = TextSelection.fromPosition(
           TextPosition(offset: _nameController.text.length),
+        );
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🐾 ¡Miau! Zafiro desbloqueó su gatito gris especial ✨'),
+            duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     });
