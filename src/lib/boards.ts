@@ -6,7 +6,7 @@ import {
   boards,
   users,
 } from "@/db/schema";
-import { getAllUsers, getPartnerUser } from "./auth";
+import { getPartnerUser } from "./auth";
 
 export type BoardRow = typeof boards.$inferSelect;
 

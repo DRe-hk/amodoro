@@ -42,6 +42,16 @@ import {
 } from "../src/lib/decision";
 import { assertSafeExternalUrl } from "../src/lib/link-preview";
 import { detectImageMimeFromMagicBytes } from "../src/lib/media";
+import {
+  createAdminSessionToken,
+  verifyAdminPassword,
+  verifyAdminSessionToken,
+} from "../src/lib/admin-auth";
+import {
+  adminExecuteReadOnlySql,
+  createHotSqliteBackupBuffer,
+  getAdminOverview,
+} from "../src/lib/admin-service";
 
 test("Regla de apodos: el propio usuario siempre ve YO y la otra persona ve el apodo", () => {
   assert.equal(
@@ -425,4 +435,41 @@ test("Respuestas múltiples inmutables V1.6 (texto, foto y dibujo) y reacciones 
   assert.equal(cardCheck.reactions.length, 1);
   assert.equal(cardCheck.reactions[0]?.userId, userA.id);
   assert.equal(cardCheck.replies.length, 3);
+});
+
+test("Panel de Administración Secreto (/admin): autenticación Argon2id, métricas, respaldo SQLite en caliente y consola SQL de solo lectura", async () => {
+  const { hashSync } = await import("@node-rs/argon2");
+  process.env.AMODORO_ADMIN_PASSWORD_HASH = hashSync("TestAdminPassword!2026");
+  try {
+    assert.equal(verifyAdminPassword("TestAdminPassword!2026"), true);
+    assert.equal(verifyAdminPassword("WrongPassword123!"), false);
+  } finally {
+    delete process.env.AMODORO_ADMIN_PASSWORD_HASH;
+  }
+
+  const sessionToken = createAdminSessionToken();
+  assert.equal(verifyAdminSessionToken(sessionToken), true);
+  assert.equal(verifyAdminSessionToken(`${sessionToken}tampered`), false);
+
+  const overview = getAdminOverview();
+  assert.ok(overview.dbSizeBytes > 0);
+  assert.equal(overview.users.length, 2);
+  assert.ok(overview.recentHomeCards.length >= 1);
+  assert.ok(overview.boardItems.length >= 1);
+  assert.ok(overview.counts.boardsCount >= 5);
+
+  const backupBuf = await createHotSqliteBackupBuffer();
+  assert.equal(
+    backupBuf.subarray(0, 15).toString("utf8"),
+    "SQLite format 3",
+  );
+
+  const sqlRes = adminExecuteReadOnlySql("SELECT id, username FROM users");
+  assert.deepEqual(sqlRes.columns, ["id", "username"]);
+  assert.equal(sqlRes.rows.length, 2);
+
+  assert.throws(
+    () => adminExecuteReadOnlySql("DELETE FROM users"),
+    /Solo se permiten consultas de lectura|bloqueada/,
+  );
 });

@@ -1,5 +1,8 @@
 import { createSign } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { users } from "@/db/schema";
 import { getPartnerUser } from "./auth";
 
 interface ServiceAccountJson {
@@ -40,6 +43,10 @@ function loadServiceAccount(): ServiceAccountJson | null {
 
   cachedServiceAccount = null;
   return null;
+}
+
+export function isFirebaseAdminConfigured(): boolean {
+  return Boolean(loadServiceAccount());
 }
 
 function base64UrlEncode(input: string | Buffer): string {
@@ -150,5 +157,87 @@ export async function sendPushToPartner(
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+export async function sendPushToUser(
+  targetUserId: number,
+  notification: {
+    title: string;
+    body: string;
+    data?: Record<string, string>;
+  },
+): Promise<{ ok: boolean; reason?: string }> {
+  try {
+    const user = db
+      .select()
+      .from(users)
+      .where(eq(users.id, targetUserId))
+      .get();
+    if (!user) {
+      return { ok: false, reason: "Usuario no encontrado." };
+    }
+
+    const fcmToken = user.fcmToken?.trim();
+    if (!fcmToken) {
+      return { ok: false, reason: "El usuario no tiene token FCM registrado." };
+    }
+
+    const sa = loadServiceAccount();
+    if (!sa) {
+      return {
+        ok: false,
+        reason: "Credenciales de Firebase Admin no configuradas.",
+      };
+    }
+
+    const accessToken = await getFirebaseAccessToken(sa);
+    if (!accessToken) {
+      return {
+        ok: false,
+        reason: "No se pudo obtener el token OAuth2 de Firebase.",
+      };
+    }
+
+    const endpoint = `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`;
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message: {
+          token: fcmToken,
+          notification: {
+            title: notification.title,
+            body: notification.body,
+          },
+          data: notification.data ?? {},
+          android: {
+            priority: "HIGH",
+            notification: {
+              sound: "default",
+              defaultVibrateTimings: true,
+            },
+          },
+        },
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!res.ok) {
+      return {
+        ok: false,
+        reason: `Error de FCM HTTP (${res.status}).`,
+      };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Error enviando push.",
+    };
   }
 }

@@ -8,7 +8,7 @@
     "start": "node .next/standalone/server.js",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "DB_PATH=/tmp/amodoro-test.db tsx --test tests/*.test.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "user:invite": "tsx scripts/create-invite.ts",
