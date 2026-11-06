@@ -24,6 +24,14 @@ function safeAddColumn(
   }
 }
 
+function safeExec(sqlite: Database.Database, sqlStr: string) {
+  try {
+    sqlite.exec(sqlStr);
+  } catch {
+    // Ignore already exists / index error
+  }
+}
+
 function bootstrapSchema(sqlite: Database.Database) {
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -41,6 +49,7 @@ function bootstrapSchema(sqlite: Database.Database) {
       accent_palette TEXT NOT NULL DEFAULT 'fig-sage',
       quick_replies_json TEXT NOT NULL DEFAULT '["Te amo","Me alegraste el día","Qué bonito","Te extraño mucho","Me sacaste una sonrisa"]',
       reaction_emojis_json TEXT NOT NULL DEFAULT '["❤️","🥰","🥺","✨","🔥","🫶"]',
+      pin_version INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS users_username_idx ON users(username);
@@ -51,7 +60,9 @@ function bootstrapSchema(sqlite: Database.Database) {
       created_at INTEGER NOT NULL,
       expires_at INTEGER NOT NULL,
       last_seen_at INTEGER NOT NULL,
-      user_agent TEXT
+      user_agent TEXT,
+      device_id TEXT,
+      device_name TEXT
     );
 
     CREATE TABLE IF NOT EXISTS invite_tokens (
@@ -80,6 +91,14 @@ function bootstrapSchema(sqlite: Database.Database) {
       created_at INTEGER NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS media_path_idx ON media(path);
+
+    CREATE TABLE IF NOT EXISTS stickers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      media_id INTEGER NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS stickers_owner_idx ON stickers(owner_id);
 
     CREATE TABLE IF NOT EXISTS home_cards (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -247,6 +266,26 @@ function bootstrapSchema(sqlite: Database.Database) {
   safeAddColumn(sqlite, "board_items", "completed_by INTEGER");
   safeAddColumn(sqlite, "board_items", "completion_text TEXT");
   safeAddColumn(sqlite, "board_items", "completion_media_id INTEGER");
+  safeAddColumn(sqlite, "users", "pin_version INTEGER NOT NULL DEFAULT 1");
+  safeAddColumn(sqlite, "sessions", "device_id TEXT");
+  safeAddColumn(sqlite, "sessions", "device_name TEXT");
+  safeExec(
+    sqlite,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_user_device ON sessions(user_id, device_id) WHERE device_id IS NOT NULL;",
+  );
+  safeExec(
+    sqlite,
+    `CREATE TABLE IF NOT EXISTS stickers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      media_id INTEGER NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+      created_at INTEGER NOT NULL
+    );`,
+  );
+  safeExec(
+    sqlite,
+    "CREATE INDEX IF NOT EXISTS stickers_owner_idx ON stickers(owner_id);",
+  );
 }
 
 function open(): Database.Database {

@@ -26,6 +26,7 @@ export type ActiveDecisionState = {
   mySubmittedVotes: Record<number, boolean> | null;
   partnerHasVoted: boolean;
   winner: CandidateItem | null;
+  resolvedAt?: Date | null;
 };
 
 function pickRandomSubset<T>(items: T[], count: number): T[] {
@@ -147,6 +148,7 @@ export function getCurrentDecisionState(
     mySubmittedVotes,
     partnerHasVoted: partnerVotes.length > 0,
     winner,
+    resolvedAt: latest.resolvedAt,
   };
 }
 
@@ -183,6 +185,7 @@ export function spinRouletteDecision(): ActiveDecisionState | null {
     mySubmittedVotes: null,
     partnerHasVoted: false,
     winner,
+    resolvedAt: session.resolvedAt,
   };
 }
 

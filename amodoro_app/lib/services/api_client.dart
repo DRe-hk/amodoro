@@ -1,9 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/amodoro_models.dart';
+import '../widgets/amodoro_image.dart';
+import 'local_lock.dart';
+import 'offline_store.dart';
+
+/// Deserializa en un Isolate secundario mediante [compute] el payload completo de sincronización.
+SyncPayload _parseSyncPayloadFromRaw(String jsonString) {
+  final map = jsonDecode(jsonString) as Map<String, dynamic>;
+  return SyncPayload.fromJson(map, isOffline: false);
+}
 
 class AmodoroApiException implements Exception {
   final String message;
@@ -18,21 +29,31 @@ class AmodoroApiClient {
   static const String defaultBaseUrl = 'https://amodoro.drehk.dev';
   static const String _prefToken = 'amodoro_session_token';
   static const String _prefRememberedUser = 'amodoro_remembered_user_json';
-  static const String _prefCachedSync = 'amodoro_cached_sync_json';
 
   final String _baseUrl = defaultBaseUrl;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
 
+  final LocalLockService localLock = LocalLockService();
+  final OfflineStore offlineStore = OfflineStore();
+
   String? _token;
   UserProfile? _rememberedUser;
   bool isPinUnlocked = false;
+  bool needsReauth = false;
+
+  String? _deviceId;
+  String? _deviceName;
+  SyncPayload? _lastLoadedSyncPayload;
 
   String get baseUrl => _baseUrl;
   String? get token => _token;
   UserProfile? get rememberedUser => _rememberedUser;
   bool get isAuthenticated => _token != null && _token!.isNotEmpty;
+  String? get deviceId => _deviceId;
+  String? get deviceName => _deviceName;
+  SyncPayload? get lastCachedSync => _lastLoadedSyncPayload;
 
   Future<String?> _readSecureOrPrefs(String key) async {
     try {
@@ -73,6 +94,9 @@ class AmodoroApiClient {
 
   Future<void> init() async {
     _token = await _readSecureOrPrefs(_prefToken);
+    if (_token != null && _token!.isNotEmpty) {
+      AmodoroImage.setAuthToken(_token);
+    }
     final rawRemembered = await _readSecureOrPrefs(_prefRememberedUser);
     if (rawRemembered != null && rawRemembered.isNotEmpty) {
       try {
@@ -82,10 +106,24 @@ class AmodoroApiClient {
         }
       } catch (_) {}
     }
+
+    await localLock.init();
+    _deviceId = await localLock.getDeviceId();
+    _deviceName = await localLock.getDeviceName();
+
+    // Arranque instantáneo: carga inicial desde almacenamiento offline
+    _lastLoadedSyncPayload = await offlineStore.loadCachedSync();
+    if (_lastLoadedSyncPayload?.me != null && _rememberedUser == null) {
+      _rememberedUser = _lastLoadedSyncPayload!.me;
+    }
   }
 
   Future<void> setToken(String? token) async {
     _token = token;
+    AmodoroImage.setAuthToken(token);
+    if (token != null && token.isNotEmpty) {
+      needsReauth = false;
+    }
     await _writeSecureAndPrefs(_prefToken, token);
   }
 
@@ -117,21 +155,38 @@ class AmodoroApiClient {
       }
     }
     isPinUnlocked = false;
+    needsReauth = false;
+    _lastLoadedSyncPayload = null;
+    AmodoroImage.setAuthToken(null);
+    await offlineStore.clear();
     await setToken(null);
     if (clearRememberedAccount) {
       await clearRememberedUser();
     }
   }
 
-  Map<String, String> _headers() {
+  Map<String, String> _headers([Map<String, String>? extra]) {
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      if (_deviceId != null && _deviceId!.isNotEmpty) 'X-Device-Id': _deviceId!,
+      if (_deviceName != null && _deviceName!.isNotEmpty) 'X-Device-Name': _deviceName!,
     };
     if (_token != null && _token!.isNotEmpty) {
       headers['Authorization'] = 'Bearer $_token';
     }
+    if (extra != null) {
+      headers.addAll(extra);
+    }
     return headers;
+  }
+
+  void _checkUnauthorized(http.Response res) {
+    if (res.statusCode == 401) {
+      needsReauth = true;
+      isPinUnlocked = false;
+      throw const AmodoroApiException('Sesión expirada. Ingresa tu PIN.');
+    }
   }
 
   String _cleanError(Object error, [String fallback = 'Ocurrió un error inesperado.']) {
@@ -231,7 +286,10 @@ class AmodoroApiClient {
       }
       await setToken(body['token']?.toString());
       await _saveUserFromAuthBody(body);
+      final pinVersion = (body['user']?['pinVersion'] as num?)?.toInt() ?? 1;
+      await localLock.saveLocalPin(pin, pinVersion);
       isPinUnlocked = true;
+      needsReauth = false;
       return body;
     } catch (e) {
       throw AmodoroApiException(
@@ -245,6 +303,38 @@ class AmodoroApiClient {
     int? userId,
     String? username,
   }) async {
+    // 1. Verificación previa de bloqueo local escalonado
+    final remainingLockout = await localLock.getRemainingLockoutSeconds();
+    if (remainingLockout > 0) {
+      throw AmodoroApiException(
+        'Demasiados intentos fallidos. Inténtalo de nuevo en $remainingLockout s.',
+      );
+    }
+
+    // 2. Si el PIN local está configurado, verificarlo localmente de forma instantánea
+    if (await localLock.isPinConfigured()) {
+      final localOk = await localLock.verifyLocalPin(pin);
+      if (!localOk) {
+        final newLockout = await localLock.getRemainingLockoutSeconds();
+        if (newLockout > 0) {
+          throw AmodoroApiException(
+            'Demasiados intentos fallidos. Inténtalo de nuevo en $newLockout s.',
+          );
+        }
+        throw const AmodoroApiException('PIN incorrecto.');
+      }
+
+      isPinUnlocked = true;
+      needsReauth = false;
+
+      // Sincronización en segundo plano con el servidor (sin bloquear al usuario)
+      final targetUserId = userId ?? _rememberedUser?.id;
+      final targetUsername = username ?? _rememberedUser?.username;
+      unawaited(_backgroundServerPinSync(pin, targetUserId, targetUsername));
+
+      return {'ok': true, 'local': true};
+    }
+
     try {
       final targetUserId = userId ?? _rememberedUser?.id;
       final targetUsername = username ?? _rememberedUser?.username;
@@ -264,6 +354,8 @@ class AmodoroApiClient {
           .timeout(const Duration(seconds: 15));
       final body = jsonDecode(res.body) as Map<String, dynamic>;
       if (res.statusCode >= 400 || body['ok'] != true) {
+        // Registrar intento fallido localmente para proteger el dispositivo
+        await localLock.verifyLocalPin(pin);
         throw AmodoroApiException(
           (body['error'] ?? 'PIN incorrecto.').toString(),
         );
@@ -272,10 +364,48 @@ class AmodoroApiClient {
         await setToken(body['token']?.toString());
       }
       await _saveUserFromAuthBody(body);
+
+      final pinVersion = (body['user']?['pinVersion'] as num?)?.toInt() ?? 1;
+      await localLock.saveLocalPin(pin, pinVersion);
+
       isPinUnlocked = true;
+      needsReauth = false;
       return body;
     } catch (e) {
+      if (e is AmodoroApiException) rethrow;
       throw AmodoroApiException(_cleanError(e, 'PIN incorrecto.'));
+    }
+  }
+
+  Future<void> _backgroundServerPinSync(
+    String pin,
+    int? userId,
+    String? username,
+  ) async {
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$_baseUrl/api/v1/auth'),
+            headers: _headers(),
+            body: jsonEncode({
+              'mode': 'verify_pin',
+              'pin': pin.trim(),
+              if (userId != null && userId > 0) 'userId': userId,
+              if (username != null && username.isNotEmpty) 'username': username,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      if (res.statusCode < 400 && body['ok'] == true) {
+        if (body['token'] != null) {
+          await setToken(body['token']?.toString());
+        }
+        await _saveUserFromAuthBody(body);
+        final pinVersion = (body['user']?['pinVersion'] as num?)?.toInt() ?? 1;
+        await localLock.setPinVersion(pinVersion);
+      }
+    } catch (_) {
+      // Ignorar fallos de red en sincronización secundaria offline
     }
   }
 
@@ -306,10 +436,16 @@ class AmodoroApiClient {
         await setToken(body['token']?.toString());
       }
       await _saveUserFromAuthBody(body);
+      final pinVersion = (body['user']?['pinVersion'] as num?)?.toInt() ??
+          ((await localLock.getPinVersion()) + 1);
+      await localLock.saveLocalPin(newPin, pinVersion);
       isPinUnlocked = true;
+      needsReauth = false;
       return body;
     } catch (e) {
-      throw AmodoroApiException(_cleanError(e, 'No se pudo actualizar el PIN.'));
+      throw AmodoroApiException(
+        _cleanError(e, 'No se pudo actualizar el PIN.'),
+      );
     }
   }
 
@@ -435,50 +571,62 @@ class AmodoroApiClient {
     }
   }
 
-  Future<SyncPayload?> _loadCachedSync() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_prefCachedSync);
-      if (raw != null && raw.isNotEmpty) {
-        final map = jsonDecode(raw) as Map<String, dynamic>;
-        return SyncPayload.fromJson(map, isOffline: true);
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  Future<void> _saveCachedSync(Map<String, dynamic> body) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_prefCachedSync, jsonEncode(body));
-    } catch (_) {}
-  }
-
+  /// Sincroniza datos con el servidor usando HTTP condicional (ETag / If-None-Match).
+  /// - Si responde 304 Not Modified: devuelve el estado actual en memoria/disco sin deserializar.
+  /// - Si responde 200 OK: guarda el ETag y procesa el nuevo JSON en un Isolate con [compute].
+  /// - Si responde 401 Unauthorized: activa [needsReauth] sin borrar datos locales.
   Future<SyncPayload> fetchSync() async {
     try {
+      final savedEtag = await offlineStore.getSavedETag();
+      final headers = _headers(
+        savedEtag != null && savedEtag.isNotEmpty
+            ? {'If-None-Match': savedEtag}
+            : null,
+      );
+
       final res = await http
-          .get(Uri.parse('$_baseUrl/api/v1/sync'), headers: _headers())
+          .get(Uri.parse('$_baseUrl/api/v1/sync'), headers: headers)
           .timeout(const Duration(seconds: 15));
-      final body = jsonDecode(res.body) as Map<String, dynamic>;
-      if (res.statusCode == 401) {
-        await logout();
-        throw const AmodoroApiException('Sesión expirada. Ingresa tu PIN.');
+
+      if (res.statusCode == 304) {
+        // 304 Not Modified: retornar el estado actual sin deserializar ni emitir cambios innecesarios
+        if (_lastLoadedSyncPayload != null) {
+          return _lastLoadedSyncPayload!;
+        }
+        final cached = await offlineStore.loadCachedSync();
+        if (cached != null) {
+          _lastLoadedSyncPayload = cached;
+          return cached;
+        }
       }
+
+      _checkUnauthorized(res);
+
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
       if (res.statusCode >= 400 || body['ok'] != true) {
         throw AmodoroApiException(
           (body['error'] ?? 'Error al sincronizar datos.').toString(),
         );
       }
-      await _saveCachedSync(body);
-      final payload = SyncPayload.fromJson(body, isOffline: false);
+
+      final newEtag = res.headers['etag'] ?? res.headers['ETag'];
+      await offlineStore.saveSyncJson(res.body, etag: newEtag);
+
+      // Deserialización en Isolate secundario con compute(...) para no generar tirones en UI
+      final payload = await compute(_parseSyncPayloadFromRaw, res.body);
+      _lastLoadedSyncPayload = payload;
       await setRememberedUser(payload.me);
       return payload;
     } catch (e) {
       if (e is AmodoroApiException && e.message.contains('Sesión expirada')) {
         rethrow;
       }
-      final cached = await _loadCachedSync();
+      if (_lastLoadedSyncPayload != null) {
+        return _lastLoadedSyncPayload!.copyWith(isOffline: true);
+      }
+      final cached = await offlineStore.loadCachedSync();
       if (cached != null) {
+        _lastLoadedSyncPayload = cached;
         return cached;
       }
       throw AmodoroApiException(
@@ -1256,6 +1404,146 @@ class AmodoroApiClient {
       }
     } catch (_) {
       // Silently ignore push token registration errors when offline
+    }
+  }
+
+  // --- Gestión de Stickers (v1.7.0) ---
+
+  /// Obtiene la lista de stickers guardados del usuario y pareja.
+  Future<List<StickerModel>> fetchStickers() async {
+    try {
+      final res = await http
+          .get(Uri.parse('$_baseUrl/api/v1/stickers'), headers: _headers())
+          .timeout(const Duration(seconds: 15));
+
+      _checkUnauthorized(res);
+
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      if (res.statusCode >= 400 || body['ok'] != true) {
+        throw AmodoroApiException(
+          (body['error'] ?? 'No se pudieron cargar los stickers.').toString(),
+        );
+      }
+      final rawList = body['stickers'];
+      if (rawList is List) {
+        return rawList
+            .whereType<Map<String, dynamic>>()
+            .map(StickerModel.fromJson)
+            .toList();
+      }
+      return const [];
+    } catch (e) {
+      throw AmodoroApiException(
+        _cleanError(e, 'No se pudieron cargar los stickers.'),
+      );
+    }
+  }
+
+  /// Crea un nuevo sticker a partir de un archivo, bytes o data URL base64.
+  Future<StickerModel> createSticker({
+    File? file,
+    Uint8List? bytes,
+    String? base64Data,
+    String mime = 'image/png',
+  }) async {
+    try {
+      String resolvedBase64 = base64Data?.trim() ?? '';
+      if (resolvedBase64.isEmpty && bytes != null && bytes.isNotEmpty) {
+        resolvedBase64 = 'data:$mime;base64,${base64Encode(bytes)}';
+      } else if (resolvedBase64.isEmpty && file != null) {
+        final fileBytes = await file.readAsBytes();
+        resolvedBase64 = 'data:$mime;base64,${base64Encode(fileBytes)}';
+      }
+
+      if (resolvedBase64.isEmpty) {
+        throw ArgumentError('Se requiere un archivo o datos base64 para crear un sticker.');
+      }
+
+      final res = await http
+          .post(
+            Uri.parse('$_baseUrl/api/v1/stickers'),
+            headers: _headers(),
+            body: jsonEncode({
+              'imageBase64': resolvedBase64,
+              'mediaDataUrl': resolvedBase64,
+            }),
+          )
+          .timeout(const Duration(seconds: 25));
+
+      _checkUnauthorized(res);
+
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      if (res.statusCode >= 400 || body['ok'] != true) {
+        throw AmodoroApiException(
+          (body['error'] ?? 'No se pudo crear el sticker.').toString(),
+        );
+      }
+
+      final stickerMap = body['sticker'];
+      if (stickerMap is Map<String, dynamic>) {
+        return StickerModel.fromJson(stickerMap);
+      }
+      return StickerModel.fromJson(body);
+    } catch (e) {
+      throw AmodoroApiException(
+        _cleanError(e, 'No se pudo crear el sticker.'),
+      );
+    }
+  }
+
+  /// Elimina un sticker existente.
+  Future<void> deleteSticker(int stickerId) async {
+    try {
+      final res = await http
+          .delete(
+            Uri.parse('$_baseUrl/api/v1/stickers?id=$stickerId'),
+            headers: _headers(),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      _checkUnauthorized(res);
+
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      if (res.statusCode >= 400 || body['ok'] != true) {
+        throw AmodoroApiException(
+          (body['error'] ?? 'No se pudo eliminar el sticker.').toString(),
+        );
+      }
+    } catch (e) {
+      throw AmodoroApiException(
+        _cleanError(e, 'No se pudo eliminar el sticker.'),
+      );
+    }
+  }
+
+  /// Responde a una tarjeta con un sticker.
+  Future<void> replyCardWithSticker(dynamic cardId, int stickerId) async {
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$_baseUrl/api/v1/home'),
+            headers: _headers(),
+            body: jsonEncode({
+              'action': 'reply_card',
+              'cardId': int.tryParse(cardId.toString()) ?? cardId,
+              'stickerId': stickerId,
+              'mediaType': 'sticker',
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      _checkUnauthorized(res);
+
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      if (res.statusCode >= 400 || body['ok'] != true) {
+        throw AmodoroApiException(
+          (body['error'] ?? 'No se pudo responder con el sticker.').toString(),
+        );
+      }
+    } catch (e) {
+      throw AmodoroApiException(
+        _cleanError(e, 'No se pudo responder con el sticker.'),
+      );
     }
   }
 }

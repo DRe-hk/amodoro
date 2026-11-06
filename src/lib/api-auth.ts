@@ -20,7 +20,9 @@ import { checkRateLimit, logSecurityEvent, resetRateLimit } from "./rate-limit";
 export const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, If-None-Match, x-device-id, x-device-name",
+  "Access-Control-Expose-Headers": "ETag",
 };
 
 export function jsonResponse(data: unknown, status = 200): Response {
@@ -109,6 +111,7 @@ export type AuthMode =
   | "code"
   | "verify_pin"
   | "pin_login"
+  | "check_pin"
   | "password"
   | "change_pin"
   | "recover_pin"
@@ -130,6 +133,8 @@ export async function loginApiUser(input: {
   rawToken?: string;
   clientIp?: string;
   userAgent?: string | null;
+  deviceId?: string | null;
+  deviceName?: string | null;
 }) {
   ensureInitialSeed();
   const all = getAllUsers();
@@ -140,6 +145,43 @@ export async function loginApiUser(input: {
       deleteSessionByToken(input.rawToken);
     }
     return { loggedOut: true as const };
+  }
+
+  if (input.mode === "check_pin") {
+    const cleanPin = (input.pin ?? input.password ?? "").trim();
+    const candidateUser =
+      (input.currentUserId
+        ? all.find((u) => u.id === input.currentUserId)
+        : undefined) ??
+      (input.userId ? all.find((u) => u.id === Number(input.userId)) : undefined) ??
+      (input.username
+        ? all.find(
+            (u) =>
+              u.username.toLowerCase() === input.username!.toLowerCase().trim() ||
+              u.displayName.toLowerCase() === input.username!.toLowerCase().trim(),
+          )
+        : undefined);
+
+    if (!candidateUser) {
+      return null;
+    }
+
+    const rateKey = `check_pin:${candidateUser.id}`;
+    const rl = checkRateLimit(rateKey, 5, 15 * 60_000);
+    if (!rl.allowed) {
+      logSecurityEvent("pin_lockout", { userId: candidateUser.id, ip });
+      throw new Error(
+        `Demasiados intentos de PIN fallidos. Intenta de nuevo en ${Math.ceil(rl.retryAfterSec / 60)} min.`,
+      );
+    }
+
+    const isValid = await verifyUserPin(candidateUser.id, cleanPin);
+    if (!isValid) {
+      logSecurityEvent("pin_failed", { userId: candidateUser.id, ip });
+      return { checkedPin: true as const, valid: false, user: candidateUser };
+    }
+    resetRateLimit(rateKey);
+    return { checkedPin: true as const, valid: true, user: candidateUser };
   }
 
   let targetUser: (typeof users.$inferSelect) | undefined;
@@ -206,6 +248,51 @@ export async function loginApiUser(input: {
     if (candidateUser && (await verifyUserPin(candidateUser.id, cleanPin))) {
       resetRateLimit(rateKey);
       targetUser = candidateUser;
+
+      if (
+        input.currentUserId === candidateUser.id &&
+        input.rawToken &&
+        input.rawToken.trim()
+      ) {
+        const rawTokenTrimmed = input.rawToken.trim();
+        const tokenHash = sha256(rawTokenTrimmed);
+        const sessionRow = db
+          .select()
+          .from(sessions)
+          .where(
+            and(
+              or(eq(sessions.id, tokenHash), eq(sessions.id, rawTokenTrimmed)),
+              eq(sessions.userId, candidateUser.id),
+              gt(sessions.expiresAt, sql`unixepoch('now')`),
+            ),
+          )
+          .get();
+
+        if (sessionRow) {
+          const nowSec = Math.floor(Date.now() / 1000);
+          const newExpiresSec = nowSec + SESSION_DAYS * 86_400;
+          const sessionUpdates: Partial<typeof sessions.$inferInsert> = {
+            lastSeenAt: new Date(nowSec * 1000),
+            expiresAt: new Date(newExpiresSec * 1000),
+          };
+          if (input.deviceId) sessionUpdates.deviceId = input.deviceId;
+          if (input.deviceName) sessionUpdates.deviceName = input.deviceName;
+          if (input.userAgent) sessionUpdates.userAgent = input.userAgent;
+
+          db.update(sessions)
+            .set(sessionUpdates)
+            .where(eq(sessions.id, sessionRow.id))
+            .run();
+
+          return {
+            token: rawTokenTrimmed,
+            expiresAt: new Date(newExpiresSec * 1000),
+            user: targetUser,
+            recoveryCode: undefined,
+            reused: true as const,
+          };
+        }
+      }
     } else {
       logSecurityEvent("pin_failed", { userId: candidateUser?.id, ip });
       return null;
@@ -294,14 +381,16 @@ export async function loginApiUser(input: {
 
   if (!targetUser) return null;
 
-  const session = await createSessionForUser(
-    targetUser.id,
-    input.userAgent ?? null,
-  );
+  const session = await createSessionForUser(targetUser.id, {
+    userAgent: input.userAgent ?? null,
+    deviceId: input.deviceId ?? null,
+    deviceName: input.deviceName ?? null,
+  });
   return {
     token: session.id,
     expiresAt: session.expires,
     user: targetUser,
     recoveryCode: recoveryCodeIssued,
+    reused: false as const,
   };
 }

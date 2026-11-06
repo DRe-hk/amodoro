@@ -276,8 +276,8 @@ jobs:
       - name: Publish GitHub Release with APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.6.2
-          name: "amodoro v1.6.2 (Fix 8 Avatar Assets & Easter Egg Toast Notification)"
+          tag_name: v1.7.0
+          name: "amodoro v1.7.0 (Sesión por dispositivo, PIN local offline, stickers y rendimiento)"
           files: |
             amodoro.apk
             amodoro-arm64.apk

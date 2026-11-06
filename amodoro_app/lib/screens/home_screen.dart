@@ -5,6 +5,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../models/amodoro_models.dart';
 import '../services/api_client.dart';
 import '../theme/amodoro_theme.dart';
+import '../widgets/amodoro_image.dart';
 import '../widgets/drawing_canvas.dart';
 import '../widgets/flat_avatar.dart';
 import '../widgets/fullscreen_media_viewer.dart';
@@ -465,6 +466,202 @@ class _PartnerCardWithReplyBoxState extends State<_PartnerCardWithReplyBox> {
     }
   }
 
+  Future<void> _openReplyStickerSheet() async {
+    final stickerId = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        final isDark = Theme.of(sheetCtx).brightness == Brightness.dark;
+        final surface =
+            isDark ? AmodoroTheme.darkBackground : AmodoroTheme.lightBackground;
+        final ink = isDark ? AmodoroTheme.darkInk : AmodoroTheme.lightInk;
+        final muted = isDark ? AmodoroTheme.darkMuted : AmodoroTheme.lightMuted;
+        final borderCol =
+            isDark ? const Color(0xFF383232) : const Color(0xFFE9E4DC);
+
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+            child: Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(sheetCtx).size.height * 0.65,
+              ),
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+              decoration: AmodoroTheme.cardOutlineBox(
+                color: surface,
+                radius: 32,
+                borderColor: borderCol,
+                borderWidth: 2.0,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          AmodoroTheme.sysIcon(
+                            Symbols.sentiment_satisfied,
+                            size: 22,
+                            color: isDark
+                                ? AmodoroTheme.coralPillDark
+                                : AmodoroTheme.coralPillLight,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'ELIGE UN STICKER',
+                            style: AmodoroTheme.googleSans(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.1,
+                              color: ink,
+                            ),
+                          ),
+                        ],
+                      ),
+                      AmodoroPressableButton(
+                        onTap: () => Navigator.of(sheetCtx).pop(),
+                        width: 36,
+                        height: 36,
+                        radius: 999,
+                        color: surface,
+                        borderColor: borderCol,
+                        borderWidth: 1.5,
+                        lipColor: borderCol,
+                        lipHeight: 2.0,
+                        child: AmodoroTheme.sysIcon(
+                          Symbols.close,
+                          size: 18,
+                          color: ink,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Flexible(
+                    child: FutureBuilder<List<StickerModel>>(
+                      future: widget.api.fetchStickers(),
+                      builder: (ctx, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(32),
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+                        }
+                        final stickers = snapshot.data ?? [];
+                        if (stickers.isEmpty) {
+                          return Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  AmodoroTheme.sysIcon(
+                                    Symbols.sentiment_satisfied,
+                                    size: 40,
+                                    color: muted,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'No hay stickers aún',
+                                    style: AmodoroTheme.googleSans(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: ink,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Crea stickers desde Ajustes > Mis stickers.',
+                                    textAlign: TextAlign.center,
+                                    style: AmodoroTheme.googleSans(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: muted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        return GridView.builder(
+                          shrinkWrap: true,
+                          physics: const BouncingScrollPhysics(),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                            childAspectRatio: 1.0,
+                          ),
+                          itemCount: stickers.length,
+                          itemBuilder: (ctx, index) {
+                            final sticker = stickers[index];
+                            final resolvedUrl =
+                                widget.api.resolveMediaUrl(sticker.mediaUrl);
+                            return GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => Navigator.of(sheetCtx).pop(sticker.id),
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: AmodoroTheme.cardOutlineBox(
+                                  color: isDark
+                                      ? AmodoroTheme.darkContainer
+                                      : Colors.white,
+                                  radius: 18,
+                                  borderColor: borderCol,
+                                  borderWidth: 1.5,
+                                  subtleShadow: true,
+                                ),
+                                child: AmodoroImage(
+                                  imageUrl: resolvedUrl,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (stickerId != null && mounted) {
+      setState(() => _sendingReply = true);
+      try {
+        await widget.api.replyCardWithSticker(widget.card.id, stickerId);
+        if (mounted) {
+          setState(() => _sendingReply = false);
+        }
+        await widget.onRefresh();
+      } catch (e) {
+        if (mounted) {
+          setState(() => _sendingReply = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Error al enviar sticker: ${e.toString().replaceFirst('Exception: ', '')}',
+              ),
+            ),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _submitReply() async {
     if (_sendingReply) return;
     final text = _replyController.text.trim();
@@ -783,6 +980,12 @@ class _PartnerCardWithReplyBoxState extends State<_PartnerCardWithReplyBox> {
                         borderColor: cardBorderColor,
                         onTap: _openReplyDrawingSheet,
                       ),
+                      const SizedBox(width: 5),
+                      _buildReplyMediaIconButton(
+                        icon: Symbols.sentiment_satisfied,
+                        borderColor: cardBorderColor,
+                        onTap: _openReplyStickerSheet,
+                      ),
                     ] else
                       AmodoroPressableButton(
                         onTap: _sendingReply ? null : _submitReply,
@@ -1035,6 +1238,28 @@ class _PartnerCardWithReplyBoxState extends State<_PartnerCardWithReplyBox> {
                 builder: (context) {
                   final resolvedUrl = widget.api.resolveMediaUrl(reply.mediaUrl);
                   final heroTag = 'reply_${reply.id}';
+
+                  // Si es sticker: renderizar directo sobre el fondo sin tarjeta contenedor (v1.7.0)
+                  if (reply.mediaType == 'sticker') {
+                    return GestureDetector(
+                      onTap: () => FullscreenMediaViewer.open(
+                        context,
+                        imageUrl: resolvedUrl,
+                        heroTag: heroTag,
+                      ),
+                      child: Hero(
+                        tag: heroTag,
+                        child: AmodoroImage(
+                          imageUrl: resolvedUrl,
+                          width: 120,
+                          height: 120,
+                          fit: BoxFit.contain,
+                          errorPlaceholder: const SizedBox.shrink(),
+                        ),
+                      ),
+                    );
+                  }
+
                   return GestureDetector(
                     onTap: () => FullscreenMediaViewer.open(
                       context,
@@ -1070,26 +1295,12 @@ class _PartnerCardWithReplyBoxState extends State<_PartnerCardWithReplyBox> {
   }
 
   Widget _buildMediaWidget(String url) {
-    if (url.startsWith('data:image/')) {
-      final comma = url.indexOf(',');
-      if (comma != -1) {
-        try {
-          final bytes = base64Decode(url.substring(comma + 1));
-          return Image.memory(
-            bytes,
-            width: double.infinity,
-            height: double.infinity,
-            fit: BoxFit.cover,
-          );
-        } catch (_) {}
-      }
-    }
-    return Image.network(
-      url,
+    return AmodoroImage(
+      imageUrl: url,
       width: double.infinity,
       height: double.infinity,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+      errorPlaceholder: const SizedBox.shrink(),
     );
   }
 }

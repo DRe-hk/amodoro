@@ -8,6 +8,7 @@ import '../theme/amodoro_theme.dart';
 import '../widgets/flat_avatar.dart';
 import '../widgets/pin_keypad.dart';
 import '../widgets/pressable_button.dart';
+import 'sticker_collection_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final SyncPayload sync;
@@ -100,10 +101,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() {});
     }
   }
-
-  bool get _isZafiroEasterEgg =>
-      _myDisplayNameCtrl.text.trim().toLowerCase() == 'zafiro' &&
-      _avatarId == 'gray_kitten';
 
   void _onSelectAvatar(String id) {
     setState(() {
@@ -1082,6 +1079,101 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 18),
 
         // ---------------------------------------------------------------------
+        // SECCIÓN: Stickers y Calcomanías (v1.7.0)
+        // ---------------------------------------------------------------------
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: AmodoroTheme.cardOutlineBox(
+            color: cardBg,
+            radius: 34,
+            borderColor: borderColor,
+            borderWidth: 2.5,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'STICKERS DE LA PAREJA',
+                style: AmodoroTheme.googleSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.1,
+                  color: inkColor,
+                ),
+              ),
+              const SizedBox(height: 12),
+              AmodoroPressableButton(
+                onTap: () {
+                  Navigator.of(context).push(
+                    PageRouteBuilder(
+                      pageBuilder: (context, animation, secondaryAnimation) =>
+                          StickerCollectionScreen(
+                        api: widget.api,
+                        sync: widget.sync,
+                      ),
+                      transitionsBuilder:
+                          (context, animation, secondaryAnimation, child) {
+                        return FadeTransition(
+                          opacity: animation,
+                          child: SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(0.06, 0.0),
+                              end: Offset.zero,
+                            ).animate(
+                              CurvedAnimation(
+                                parent: animation,
+                                curve: Curves.easeOutCubic,
+                              ),
+                            ),
+                            child: child,
+                          ),
+                        );
+                      },
+                      transitionDuration: const Duration(milliseconds: 260),
+                    ),
+                  );
+                },
+                color: fieldBg,
+                borderColor: borderColor,
+                borderWidth: 1.5,
+                lipColor: borderColor,
+                lipHeight: 3.0,
+                radius: 999,
+                height: 50,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    AmodoroTheme.sysIcon(
+                      Symbols.sentiment_satisfied,
+                      size: 22,
+                      color: coralBg,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Mis stickers',
+                        style: AmodoroTheme.googleSans(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.6,
+                          color: inkColor,
+                        ),
+                      ),
+                    ),
+                    AmodoroTheme.sysIcon(
+                      Symbols.arrow_forward_ios,
+                      size: 14,
+                      color: mutedColor,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        // ---------------------------------------------------------------------
         // SECCIÓN 3: Emparejamiento y Código de Pareja
         // ---------------------------------------------------------------------
         Container(
@@ -1396,6 +1488,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1.0,
                         color: inkColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Fila informativa: Dispositivo vinculado (v1.7.0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: AmodoroTheme.cardOutlineBox(
+                  color: fieldBg,
+                  radius: 20,
+                  borderColor: borderColor,
+                  borderWidth: 1.5,
+                  subtleShadow: false,
+                ),
+                child: Row(
+                  children: [
+                    AmodoroTheme.sysIcon(
+                      Symbols.smartphone,
+                      size: 20,
+                      color: mutedColor,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Dispositivo vinculado',
+                            style: AmodoroTheme.googleSans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: inkColor,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          FutureBuilder<List<String>>(
+                            future: Future.wait([
+                              widget.api.localLock.getDeviceName(),
+                              widget.api.localLock.getDeviceId(),
+                            ]),
+                            builder: (context, snapshot) {
+                              final name = snapshot.data?[0] ??
+                                  widget.api.deviceName ??
+                                  'Dispositivo';
+                              final id = snapshot.data?[1] ??
+                                  widget.api.deviceId ??
+                                  '';
+                              final displayId =
+                                  id.length > 8 ? '${id.substring(0, 8)}...' : id;
+                              return Text(
+                                displayId.isNotEmpty ? '$name · $displayId' : name,
+                                style: AmodoroTheme.googleSans(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: mutedColor,
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
                     ),
                   ],

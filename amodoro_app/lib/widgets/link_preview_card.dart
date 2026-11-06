@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/amodoro_theme.dart';
+import 'amodoro_image.dart';
 import 'pressable_button.dart';
 
 class LinkPreviewCard extends StatelessWidget {
@@ -92,11 +93,11 @@ class LinkPreviewCard extends StatelessWidget {
                 if (isSquare)
                   Expanded(
                     child: (thumbnail != null && thumbnail!.trim().isNotEmpty)
-                        ? Image.network(
-                            thumbnail!.trim(),
+                        ? AmodoroImage(
+                            imageUrl: thumbnail!.trim(),
                             width: double.infinity,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
+                            errorPlaceholder: Container(
                               color: cardBgColor.withValues(alpha: 0.45),
                               child: Center(
                                 child: AmodoroTheme.sysIcon(
@@ -122,10 +123,10 @@ class LinkPreviewCard extends StatelessWidget {
                   SizedBox(
                     height: 135,
                     width: double.infinity,
-                    child: Image.network(
-                      thumbnail!.trim(),
+                    child: AmodoroImage(
+                      imageUrl: thumbnail!.trim(),
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
+                      errorPlaceholder: Container(
                         height: 90,
                         color: cardBgColor.withValues(alpha: 0.45),
                         child: Center(

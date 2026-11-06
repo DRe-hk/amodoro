@@ -31,6 +31,7 @@ import {
   linkPreviewCache,
   media,
   sessions,
+  stickers,
   users,
   type AvatarId,
   AVATAR_IDS,
@@ -473,6 +474,31 @@ export function getAdminOverview() {
   const mediaCount = allMedia.length;
   const linkCacheCount = allLinkCache.length;
 
+  const recentSessions = allSessions
+    .sort((a, b) => {
+      const aTime =
+        a.lastSeenAt instanceof Date
+          ? a.lastSeenAt.getTime()
+          : Number(a.lastSeenAt);
+      const bTime =
+        b.lastSeenAt instanceof Date
+          ? b.lastSeenAt.getTime()
+          : Number(b.lastSeenAt);
+      return bTime - aTime;
+    })
+    .slice(0, 50)
+    .map((s) => ({
+      id: s.id,
+      userId: s.userId,
+      username: userById.get(s.userId)?.username ?? `User #${s.userId}`,
+      userAgent: s.userAgent,
+      deviceId: s.deviceId,
+      deviceName: s.deviceName,
+      createdAt: toIsoDate(s.createdAt),
+      expiresAt: toIsoDate(s.expiresAt),
+      lastSeenAt: toIsoDate(s.lastSeenAt),
+    }));
+
   return {
     users: mappedUsers,
     storage: {
@@ -513,6 +539,7 @@ export function getAdminOverview() {
     linkCacheCount,
     recentHomeCards,
     recentReplies,
+    recentSessions,
     boardItems: mappedBoardItems,
     mediaItems,
     snapshots,
@@ -537,12 +564,14 @@ export function adminResetUserPin(
   const newPinHash = hashSync(cleanPin);
   const recoveryCode = generateReadableShortCode();
   const recoveryCodeHash = sha256(normalizeShortCode(recoveryCode));
+  const newPinVersion = (user.pinVersion ?? 1) + 1;
 
   db.update(users)
     .set({
       pinHash: newPinHash,
       passwordHash: newPinHash,
       recoveryCodeHash,
+      pinVersion: newPinVersion,
     })
     .where(eq(users.id, userId))
     .run();
@@ -740,6 +769,12 @@ export function adminCleanOrphanMedia(): {
     })
     .from(boardItems)
     .all();
+  const allStickers = db
+    .select({
+      mediaId: stickers.mediaId,
+    })
+    .from(stickers)
+    .all();
 
   const referencedIds = new Set<number>();
   for (const c of allCards) {
@@ -751,6 +786,9 @@ export function adminCleanOrphanMedia(): {
   for (const b of allBoardItems) {
     if (b.mediaId != null) referencedIds.add(b.mediaId);
     if (b.completionMediaId != null) referencedIds.add(b.completionMediaId);
+  }
+  for (const s of allStickers) {
+    if (s.mediaId != null) referencedIds.add(s.mediaId);
   }
 
   const allMedia = db.select().from(media).all();
@@ -801,6 +839,8 @@ export function adminCleanOrphanMedia(): {
 
   return { deletedMediaRows, deletedDiskFiles, freedBytes };
 }
+
+export const cleanOrphanedMedia = adminCleanOrphanMedia;
 
 export function adminClearLinkPreviewCache(): number {
   const res = db.delete(linkPreviewCache).run();
@@ -901,6 +941,7 @@ export function exportFullDatabaseJson(): Record<string, unknown> {
     homeCards: db.select().from(homeCards).all(),
     homeCardReplies: db.select().from(homeCardReplies).all(),
     reactions: db.select().from(homeCardReactions).all(),
+    stickers: db.select().from(stickers).all(),
     media: db.select().from(media).all(),
     decisionSessions: db.select().from(decisionSessions).all(),
     decisionVotes: db.select().from(decisionVotes).all(),
@@ -1048,6 +1089,7 @@ function restoreSqliteFromFileIntoLiveDb(sourceDbPath: string) {
       "sessions",
       "invite_tokens",
       "media",
+      "stickers",
       "home_cards",
       "home_card_reactions",
       "home_card_replies",
@@ -1173,3 +1215,74 @@ export function restoreFromSnapshot(filename: string): void {
   const { buffer, safeName } = getSnapshotFileBuffer(filename);
   restoreFromUploadedBuffer(buffer, safeName);
 }
+
+export function adminListSessions(userId?: number) {
+  const allUsers = db.select().from(users).all();
+  const userById = new Map(allUsers.map((u) => [u.id, u]));
+
+  const query = db
+    .select({
+      id: sessions.id,
+      userId: sessions.userId,
+      createdAt: sessions.createdAt,
+      expiresAt: sessions.expiresAt,
+      lastSeenAt: sessions.lastSeenAt,
+      userAgent: sessions.userAgent,
+      deviceId: sessions.deviceId,
+      deviceName: sessions.deviceName,
+    })
+    .from(sessions);
+
+  const rows = userId
+    ? query
+        .where(eq(sessions.userId, userId))
+        .orderBy(desc(sessions.lastSeenAt))
+        .all()
+    : query.orderBy(desc(sessions.lastSeenAt)).all();
+
+  return rows.map((s) => ({
+    id: s.id,
+    userId: s.userId,
+    username: userById.get(s.userId)?.username ?? `User #${s.userId}`,
+    userAgent: s.userAgent,
+    deviceId: s.deviceId,
+    deviceName: s.deviceName,
+    createdAt: toIsoDate(s.createdAt),
+    expiresAt: toIsoDate(s.expiresAt),
+    lastSeenAt: toIsoDate(s.lastSeenAt),
+  }));
+}
+
+export function adminPruneOldSessions(keepCount = 2): { prunedCount: number } {
+  const allSessions = db
+    .select()
+    .from(sessions)
+    .orderBy(desc(sessions.lastSeenAt))
+    .all();
+
+  const byUser = new Map<number, typeof allSessions>();
+  for (const s of allSessions) {
+    const list = byUser.get(s.userId) ?? [];
+    list.push(s);
+    byUser.set(s.userId, list);
+  }
+
+  let prunedCount = 0;
+  for (const [, userSessions] of byUser.entries()) {
+    if (userSessions.length > keepCount) {
+      const toDelete = userSessions.slice(keepCount);
+      for (const s of toDelete) {
+        db.delete(sessions).where(eq(sessions.id, s.id)).run();
+        prunedCount++;
+      }
+    }
+  }
+
+  recordAdminSecurityEvent("ADMIN_PRUNE_SESSIONS", {
+    prunedCount,
+    keepCount,
+  });
+  return { prunedCount };
+}
+
+export const pruneOldUserSessions = adminPruneOldSessions;

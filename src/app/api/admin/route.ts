@@ -16,7 +16,9 @@ import {
   adminDeleteMediaItem,
   adminDeleteUser,
   adminExecuteReadOnlySql,
+  adminListSessions,
   adminPairAllUsers,
+  adminPruneOldSessions,
   adminRegenerateRecoveryCode,
   adminResetUserPin,
   adminRevokeSessions,
@@ -327,6 +329,26 @@ export async function POST(request: Request) {
         return adminJson({
           ok: true,
           revokedCount,
+          overview: getAdminOverview(),
+        });
+      }
+
+      case "list_sessions": {
+        const userId = body.userId != null ? Number(body.userId) : undefined;
+        const sessionsList = adminListSessions(userId);
+        return adminJson({
+          ok: true,
+          sessions: sessionsList,
+        });
+      }
+
+      case "prune_sessions": {
+        const keepCount =
+          body.keepCount != null ? Number(body.keepCount) : 2;
+        const res = adminPruneOldSessions(keepCount);
+        return adminJson({
+          ok: true,
+          ...res,
           overview: getAdminOverview(),
         });
       }

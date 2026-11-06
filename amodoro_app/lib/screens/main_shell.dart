@@ -38,7 +38,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   late final PageController _pageController;
   int _activeIndex = 0;
-  int? _pressedNavIndex;
   SyncPayload? _sync;
   bool _loading = false;
   String? _error;
@@ -569,107 +568,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             // Top Navigation Capsules (HOME, BOARDS, SETTINGS)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final maxWidth = constraints.maxWidth;
-                  final slotWidth = maxWidth / _tabs.length;
-
-                  return AnimatedBuilder(
-                    animation: _pageController,
-                    builder: (context, _) {
-                      double page = _activeIndex.toDouble();
-                      if (_pageController.hasClients &&
-                          _pageController.positions.length == 1 &&
-                          _pageController.position.haveDimensions &&
-                          _pageController.page != null) {
-                        page = _pageController.page!.clamp(
-                          0.0,
-                          (_tabs.length - 1).toDouble(),
-                        );
-                      }
-
-                      return SizedBox(
-                        height: 48,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Positioned(
-                              left: page * slotWidth + 6.0,
-                              top: 6.0,
-                              width: slotWidth - 12.0,
-                              height: 36.0,
-                              child: Transform.translate(
-                                offset: Offset(
-                                  0,
-                                  _pressedNavIndex != null ? 3.5 : 0.0,
-                                ),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? AmodoroTheme.coralPillDark
-                                        : AmodoroTheme.coralPillLight,
-                                    borderRadius: BorderRadius.circular(999),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: isDark
-                                            ? AmodoroTheme.coralPillBorderDark
-                                            : AmodoroTheme.coralPillBorderLight,
-                                        offset: Offset(
-                                          0,
-                                          _pressedNavIndex != null ? 0.0 : 3.5,
-                                        ),
-                                        blurRadius: 0,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Positioned.fill(
-                              child: Row(
-                                children: List.generate(_tabs.length, (i) {
-                                  final double selectWeight =
-                                      (1.0 - (page - i).abs()).clamp(0.0, 1.0);
-                                  final Color labelColor = Color.lerp(
-                                    const Color(0xFF9B8E8E),
-                                    Colors.white,
-                                    selectWeight,
-                                  )!;
-
-                                  return Expanded(
-                                    child: GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onTapDown: (_) =>
-                                          setState(() => _pressedNavIndex = i),
-                                      onTapUp: (_) =>
-                                          setState(() => _pressedNavIndex = null),
-                                      onTapCancel: () =>
-                                          setState(() => _pressedNavIndex = null),
-                                      onTap: () => _jumpToTab(i),
-                                      child: Center(
-                                        child: Text(
-                                          _tabs[i],
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: AmodoroTheme.googleSans(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 1.3,
-                                            color: labelColor,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                },
+              child: _MainShellTopPill(
+                pageController: _pageController,
+                activeIndex: _activeIndex,
+                tabs: _tabs,
+                isDark: isDark,
+                onTabSelected: _jumpToTab,
               ),
             ),
 
@@ -775,6 +679,143 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MainShellTopPill extends StatefulWidget {
+  final PageController pageController;
+  final int activeIndex;
+  final List<String> tabs;
+  final bool isDark;
+  final ValueChanged<int> onTabSelected;
+
+  const _MainShellTopPill({
+    required this.pageController,
+    required this.activeIndex,
+    required this.tabs,
+    required this.isDark,
+    required this.onTabSelected,
+  });
+
+  @override
+  State<_MainShellTopPill> createState() => _MainShellTopPillState();
+}
+
+class _MainShellTopPillState extends State<_MainShellTopPill> {
+  final ValueNotifier<int?> _pressedNavIndex = ValueNotifier<int?>(null);
+
+  @override
+  void dispose() {
+    _pressedNavIndex.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth;
+        final slotWidth = maxWidth / widget.tabs.length;
+
+        return AnimatedBuilder(
+          animation: widget.pageController,
+          builder: (context, _) {
+            double page = widget.activeIndex.toDouble();
+            if (widget.pageController.hasClients &&
+                widget.pageController.positions.length == 1 &&
+                widget.pageController.position.haveDimensions &&
+                widget.pageController.page != null) {
+              page = widget.pageController.page!.clamp(
+                0.0,
+                (widget.tabs.length - 1).toDouble(),
+              );
+            }
+
+            return SizedBox(
+              height: 48,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Positioned(
+                    left: page * slotWidth + 6.0,
+                    top: 6.0,
+                    width: slotWidth - 12.0,
+                    height: 36.0,
+                    child: ValueListenableBuilder<int?>(
+                      valueListenable: _pressedNavIndex,
+                      builder: (context, pressedIndex, _) {
+                        return Transform.translate(
+                          offset: Offset(
+                            0,
+                            pressedIndex != null ? 3.5 : 0.0,
+                          ),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: widget.isDark
+                                  ? AmodoroTheme.coralPillDark
+                                  : AmodoroTheme.coralPillLight,
+                              borderRadius: BorderRadius.circular(999),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: widget.isDark
+                                      ? AmodoroTheme.coralPillBorderDark
+                                      : AmodoroTheme.coralPillBorderLight,
+                                  offset: Offset(
+                                    0,
+                                    pressedIndex != null ? 0.0 : 3.5,
+                                  ),
+                                  blurRadius: 0,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: Row(
+                      children: List.generate(widget.tabs.length, (i) {
+                        final double selectWeight =
+                            (1.0 - (page - i).abs()).clamp(0.0, 1.0);
+                        final Color labelColor = Color.lerp(
+                          const Color(0xFF9B8E8E),
+                          Colors.white,
+                          selectWeight,
+                        )!;
+
+                        return Expanded(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTapDown: (_) => _pressedNavIndex.value = i,
+                            onTapUp: (_) => _pressedNavIndex.value = null,
+                            onTapCancel: () => _pressedNavIndex.value = null,
+                            onTap: () => widget.onTabSelected(i),
+                            child: Center(
+                              child: Text(
+                                widget.tabs[i],
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AmodoroTheme.googleSans(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.3,
+                                  color: labelColor,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

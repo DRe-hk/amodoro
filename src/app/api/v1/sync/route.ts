@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { getAllUsers, getPartnerUser } from "@/lib/auth";
 import { CORS_HEADERS, getApiUser, jsonResponse } from "@/lib/api-auth";
 import {
@@ -266,22 +267,26 @@ export async function GET(request: Request) {
   const myNicknameByPartner =
     user.nicknameByPartner?.trim() || myDisplayName;
 
-  return jsonResponse({
+  const currentUserData = {
+    id: user.id,
+    username: user.username,
+    displayName: myDisplayName,
+    avatarId: user.avatarId || "cat",
+    isPaired,
+    hasPin: Boolean(user.pinHash && user.pinHash.length > 0),
+    pinVersion: user.pinVersion ?? 1,
+    nicknameByPartner: myNicknameByPartner,
+    partnerNicknameGiven: partner?.nicknameByPartner?.trim() ?? "",
+    themeMode: user.themeMode,
+    accentPalette: user.accentPalette,
+    quickReplies,
+    reactionEmojis,
+  };
+
+  const payload = {
     ok: true,
-    me: {
-      id: user.id,
-      username: user.username,
-      displayName: myDisplayName,
-      avatarId: user.avatarId || "cat",
-      isPaired,
-      hasPin: Boolean(user.pinHash && user.pinHash.length > 0),
-      nicknameByPartner: myNicknameByPartner,
-      partnerNicknameGiven: partner?.nicknameByPartner?.trim() ?? "",
-      themeMode: user.themeMode,
-      accentPalette: user.accentPalette,
-      quickReplies,
-      reactionEmojis,
-    },
+    me: currentUserData,
+    currentUser: currentUserData,
     partner: partner
       ? {
           id: partner.id,
@@ -340,7 +345,11 @@ export async function GET(request: Request) {
               winnerItemId: decision.winner
                 ? String(decision.winner.id)
                 : null,
-              resolvedAt: new Date().toISOString(),
+              resolvedAt: decision.resolvedAt
+                ? (decision.resolvedAt instanceof Date
+                    ? decision.resolvedAt.toISOString()
+                    : new Date(Number(decision.resolvedAt) * 1000).toISOString())
+                : null,
               winner: decision.winner
                 ? {
                     id: String(decision.winner.id),
@@ -354,6 +363,33 @@ export async function GET(request: Request) {
                 : null,
             }
           : null,
+    },
+  };
+
+  const bodyJson = JSON.stringify(payload);
+  const hash = createHash("sha256").update(bodyJson).digest("hex").slice(0, 16);
+  const etag = `"${hash}"`;
+
+  const ifNoneMatch = request.headers.get("if-none-match");
+  if (ifNoneMatch) {
+    const cleanIfNoneMatch = ifNoneMatch.replace(/^W\//, "").replace(/"/g, "").trim();
+    if (cleanIfNoneMatch === hash) {
+      return new Response(null, {
+        status: 304,
+        headers: {
+          ...CORS_HEADERS,
+          ETag: etag,
+        },
+      });
+    }
+  }
+
+  return new Response(bodyJson, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      ...CORS_HEADERS,
+      ETag: etag,
     },
   });
 }

@@ -1,7 +1,7 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../theme/amodoro_theme.dart';
+import 'amodoro_image.dart';
 import 'pressable_button.dart';
 
 class FullscreenMediaViewer extends StatefulWidget {
@@ -59,35 +59,20 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer> {
   }
 
   Widget _buildImageContent() {
-    if (widget.imageUrl.startsWith('data:image/')) {
-      final comma = widget.imageUrl.indexOf(',');
-      if (comma != -1) {
-        try {
-          final bytes = base64Decode(widget.imageUrl.substring(comma + 1));
-          return Image.memory(
-            bytes,
-            fit: BoxFit.contain,
-          );
-        } catch (_) {}
-      }
-    }
-    return Image.network(
-      widget.imageUrl,
+    return AmodoroImage(
+      imageUrl: widget.imageUrl,
       fit: BoxFit.contain,
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return const Center(
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.5,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
-            ),
+      placeholder: (context, _) => const Center(
+        child: SizedBox(
+          width: 36,
+          height: 36,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.5,
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
           ),
-        );
-      },
-      errorBuilder: (context, error, stackTrace) {
+        ),
+      ),
+      errorWidget: (context, error, stackTrace) {
         return Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,

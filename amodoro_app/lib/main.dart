@@ -9,6 +9,7 @@ typedef AmodoroApp = AmodoroRootApp;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  AmodoroTheme.initialize();
   try {
     await Firebase.initializeApp();
   } catch (_) {

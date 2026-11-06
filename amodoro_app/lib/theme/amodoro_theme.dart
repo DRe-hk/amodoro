@@ -17,6 +17,27 @@ class PastelPreset {
 }
 
 class AmodoroTheme {
+  static bool _initialized = false;
+
+  /// Configura GoogleFonts para que use exclusivamente las fuentes locales TTF
+  /// empaquetadas en `assets/google_fonts/` sin descargas HTTP en tiempo de ejecución.
+  static void initialize() {
+    if (_initialized) return;
+    _initialized = true;
+    GoogleFonts.config.allowRuntimeFetching = false;
+  }
+
+  // --- Caché de decoraciones frecuentes para evitar GC y reconstrucción de objetos por frame ---
+  static final Map<String, BoxDecoration> _floatingPerspectiveCache = {};
+  static final Map<String, BoxDecoration> _cardOutlineCache = {};
+  static final Map<String, BoxDecoration> _boardPillCache = {};
+  static final Map<int, Color> _darkenCache = {};
+  static final Map<double, BorderRadius> _borderRadiusCache = {};
+
+  static BorderRadius getBorderRadius(double radius) {
+    return _borderRadiusCache.putIfAbsent(radius, () => BorderRadius.circular(radius));
+  }
+
   // --- Neo-Pastel Palette (v1.5 Mockup) ---
   static const Color lightBackground = Color(0xFFFAF8F5);
   static const Color lightContainer = Color(0xFFF6EFE6);
@@ -207,13 +228,20 @@ class AmodoroTheme {
 
   /// Oscurece un color para generar su borde físico en perspectiva inferior.
   static Color darkenForPerspective(Color base, [double amount = 0.16]) {
+    final key = (base.value << 8) | (amount * 100).round();
+    final cached = _darkenCache[key];
+    if (cached != null) return cached;
     final hsl = HSLColor.fromColor(base);
     final darkerLightness = (hsl.lightness - amount).clamp(0.06, 0.92);
     final boostedSat = (hsl.saturation + 0.08).clamp(0.0, 1.0);
-    return hsl
+    final res = hsl
         .withLightness(darkerLightness)
         .withSaturation(boostedSat)
         .toColor();
+    if (_darkenCache.length < 500) {
+      _darkenCache[key] = res;
+    }
+    return res;
   }
 
   /// Decoración flotante en perspectiva (SOLO borde inferior Offset(0, thickness)):
@@ -227,9 +255,13 @@ class AmodoroTheme {
     double fullBorderWidth = 1.5,
   }) {
     final edge = perspectiveEdgeColor ?? darkenForPerspective(color, 0.16);
-    return BoxDecoration(
+    final key = '${color.value}_${radius}_${thickness}_${edge.value}_${fullBorderColor?.value}_$fullBorderWidth';
+    final cached = _floatingPerspectiveCache[key];
+    if (cached != null) return cached;
+
+    final dec = BoxDecoration(
       color: color,
-      borderRadius: BorderRadius.circular(radius),
+      borderRadius: getBorderRadius(radius),
       border: fullBorderColor != null
           ? Border.all(color: fullBorderColor, width: fullBorderWidth)
           : null,
@@ -244,6 +276,10 @@ class AmodoroTheme {
             ]
           : const [],
     );
+    if (_floatingPerspectiveCache.length < 500) {
+      _floatingPerspectiveCache[key] = dec;
+    }
+    return dec;
   }
 
   /// Decoración para tarjetas y contenedores NO interactivos (HOME, ENVIADOS, HISTORIAL, BOARDS items, inputs, modales):
@@ -256,9 +292,13 @@ class AmodoroTheme {
     bool subtleShadow = true,
   }) {
     final resolvedBorder = borderColor ?? darkenForPerspective(color, 0.10);
-    return BoxDecoration(
+    final key = '${color.value}_${radius}_${resolvedBorder.value}_${borderWidth}_$subtleShadow';
+    final cached = _cardOutlineCache[key];
+    if (cached != null) return cached;
+
+    final dec = BoxDecoration(
       color: color,
-      borderRadius: BorderRadius.circular(radius),
+      borderRadius: getBorderRadius(radius),
       border: Border.all(color: resolvedBorder, width: borderWidth),
       boxShadow: subtleShadow
           ? const [
@@ -270,6 +310,10 @@ class AmodoroTheme {
             ]
           : const [],
     );
+    if (_cardOutlineCache.length < 500) {
+      _cardOutlineCache[key] = dec;
+    }
+    return dec;
   }
 
   /// Decoración para las píldoras de tableros (`PENDIENTES`, `MÚSICA`, `PELIS`, `SERIES`, `JUEGOS`) según el mockup.
@@ -278,31 +322,38 @@ class AmodoroTheme {
     required bool isSelected,
     required bool isDark,
   }) {
-    if (isSelected) {
-      return BoxDecoration(
-        color: boardColor,
-        borderRadius: BorderRadius.circular(999),
-        boxShadow: [
-          BoxShadow(
-            color: darkenForPerspective(boardColor, 0.18),
-            offset: const Offset(0, 3.5),
-            blurRadius: 0,
-          ),
-        ],
-      );
+    final key = '${boardColor.value}_${isSelected}_$isDark';
+    final cached = _boardPillCache[key];
+    if (cached != null) return cached;
+
+    final dec = isSelected
+        ? BoxDecoration(
+            color: boardColor,
+            borderRadius: getBorderRadius(999),
+            boxShadow: [
+              BoxShadow(
+                color: darkenForPerspective(boardColor, 0.18),
+                offset: const Offset(0, 3.5),
+                blurRadius: 0,
+              ),
+            ],
+          )
+        : BoxDecoration(
+            color: isDark ? darkContainer : Colors.white,
+            borderRadius: getBorderRadius(999),
+            border: Border.all(color: boardColor, width: 2.0),
+            boxShadow: [
+              BoxShadow(
+                color: boardColor,
+                offset: const Offset(0, 3.0),
+                blurRadius: 0,
+              ),
+            ],
+          );
+    if (_boardPillCache.length < 200) {
+      _boardPillCache[key] = dec;
     }
-    return BoxDecoration(
-      color: isDark ? darkContainer : Colors.white,
-      borderRadius: BorderRadius.circular(999),
-      border: Border.all(color: boardColor, width: 2.0),
-      boxShadow: [
-        BoxShadow(
-          color: boardColor,
-          offset: const Offset(0, 3.0),
-          blurRadius: 0,
-        ),
-      ],
-    );
+    return dec;
   }
 
   static Color getContrastingInk(Color bg) {

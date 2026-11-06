@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -112,10 +113,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  bool get _isZafiroEasterEgg =>
-      _nameController.text.trim().toLowerCase() == 'zafiro' &&
-      _selectedAvatarId == 'gray_kitten';
-
   void _onSelectAvatar(String avatarId) {
     setState(() {
       _selectedAvatarId = avatarId;
@@ -138,6 +135,37 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      // Desbloqueo instantáneo local si el PIN ya está configurado en el dispositivo
+      if (await widget.api.localLock.isPinConfigured()) {
+        final localOk = await widget.api.localLock.verifyLocalPin(pin);
+        if (!localOk) {
+          final lockout = await widget.api.localLock.getRemainingLockoutSeconds();
+          if (!mounted) return;
+          setState(() {
+            _busy = false;
+            _pinError = lockout > 0
+                ? 'Demasiados intentos fallidos. Inténtalo de nuevo en $lockout s.'
+                : 'PIN incorrecto.';
+          });
+          _unlockPinKey.currentState?.clear();
+          return;
+        }
+
+        widget.api.isPinUnlocked = true;
+        widget.api.needsReauth = false;
+        if (!mounted) return;
+        setState(() => _busy = false);
+        _notifyAuthenticated();
+
+        // Sincronización en segundo plano con el servidor sin demorar la UI
+        unawaited(
+          widget.api
+              .verifyPin(pin, userId: user.id, username: user.username)
+              .catchError((_) => <String, dynamic>{}),
+        );
+        return;
+      }
+
       await widget.api.verifyPin(
         pin,
         userId: user.id,

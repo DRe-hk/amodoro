@@ -8,6 +8,7 @@ import {
   homeCardReplies,
   homeCards,
   media,
+  stickers,
   users,
   type CardFont,
   type CardFontSize,
@@ -46,7 +47,7 @@ export interface HomeCardReplyDto {
   authorAvatarId: string;
   isMine: boolean;
   textContent: string;
-  mediaType: "none" | "image" | "drawing";
+  mediaType: "none" | "image" | "drawing" | "sticker";
   mediaUrl: string | null;
   createdAt: string;
 }
@@ -236,14 +237,16 @@ function attachReactionsAndReplies(
   for (const rep of allReplies) {
     const repAuthor = userById.get(rep.userId) ?? partner;
     const replyList = repliesByCard.get(rep.cardId) ?? [];
-    const normalizedMediaType: "none" | "image" | "drawing" =
-      rep.mediaType === "drawing"
-        ? "drawing"
-        : rep.mediaType === "image" ||
-            rep.mediaType === "photo" ||
-            rep.mediaId != null
-          ? "image"
-          : "none";
+    const normalizedMediaType: "none" | "image" | "drawing" | "sticker" =
+      rep.mediaType === "sticker"
+        ? "sticker"
+        : rep.mediaType === "drawing"
+          ? "drawing"
+          : rep.mediaType === "image" ||
+              rep.mediaType === "photo" ||
+              rep.mediaId != null
+            ? "image"
+            : "none";
 
     replyList.push({
       id: String(rep.id),
@@ -560,6 +563,7 @@ export function replyToHomeCard(
     mediaDataUrl?: string | null;
     imageBase64?: string | null;
     mediaId?: number | null;
+    stickerId?: number | string | null;
   },
 ): HomeCardReplyDto {
   const userObj: AuthUser =
@@ -585,16 +589,35 @@ export function replyToHomeCard(
   }
 
   const rawDataUrl = (input.mediaDataUrl ?? input.imageBase64 ?? "").trim();
-  const requestedKind: "image" | "drawing" =
-    input.mediaType === "drawing" || input.mediaKind === "drawing"
-      ? "drawing"
-      : "image";
+  let requestedKind: "image" | "drawing" | "sticker" =
+    input.mediaType === "sticker" || input.mediaKind === "sticker"
+      ? "sticker"
+      : input.mediaType === "drawing" || input.mediaKind === "drawing"
+        ? "drawing"
+        : "image";
 
   let mediaId: number | null = input.mediaId ?? null;
+
+  if (input.stickerId != null) {
+    const numericStickerId = Number(input.stickerId);
+    if (Number.isInteger(numericStickerId) && numericStickerId > 0) {
+      const sticker = db
+        .select()
+        .from(stickers)
+        .where(eq(stickers.id, numericStickerId))
+        .get();
+      if (!sticker) {
+        throw new Error("Sticker no encontrado.");
+      }
+      mediaId = sticker.mediaId;
+      requestedKind = "sticker";
+    }
+  }
+
   if (mediaId == null && rawDataUrl) {
     mediaId = saveBase64Media({
       dataUrl: rawDataUrl,
-      kind: requestedKind,
+      kind: requestedKind === "drawing" ? "drawing" : "image",
       ownerId: userObj.id,
     });
   }
@@ -610,7 +633,7 @@ export function replyToHomeCard(
     throw new Error("Escribe una respuesta o adjunta una imagen o dibujo.");
   }
 
-  const resolvedMediaType: "none" | "image" | "drawing" =
+  const resolvedMediaType: "none" | "image" | "drawing" | "sticker" =
     mediaId != null ? requestedKind : "none";
 
   const nowIso = new Date().toISOString();

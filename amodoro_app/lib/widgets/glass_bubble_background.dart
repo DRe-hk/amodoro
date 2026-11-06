@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 /// A dynamic 2.5D swaying sunflowers background ("animación de girasoles
@@ -38,13 +39,14 @@ class GlassBubbleBackground extends StatefulWidget {
 typedef SunflowerWindBackground = GlassBubbleBackground;
 
 class _GlassBubbleBackgroundState extends State<GlassBubbleBackground>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _controller;
   late final Animation<double> _curvedAnimation;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 10),
@@ -58,8 +60,22 @@ class _GlassBubbleBackgroundState extends State<GlassBubbleBackground>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      if (_controller.isAnimating) {
+        _controller.stop(canceled: false);
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      if (!_controller.isAnimating) {
+        _controller.repeat(reverse: true);
+      }
+    }
   }
 
   @override
@@ -350,8 +366,6 @@ class _Sunflowers25DPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
 
-    final w = size.width;
-    final h = size.height;
     final t = animationProgress;
 
     // Scale multiplier based on bubbleSize prop
@@ -474,6 +488,37 @@ class _Sunflowers25DPainter extends CustomPainter {
     );
   }
 
+  // --- Scratch reusable objects to eliminate GC and per-frame allocations ---
+  static final Path _scratchPath = Path();
+  static final Path _stemPath = Path();
+  static final Path _leafPath = Path();
+  static final Path _veinPath = Path();
+  static final Path _grassPath = Path();
+
+  static final Paint _bgPaint = Paint();
+  static final Paint _hillPaint = Paint();
+  static final Paint _hillEdgePaint = Paint();
+  static final Paint _turfPaint = Paint();
+  static final Paint _stemShadowPaint = Paint()..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
+  static final Paint _stemMainPaint = Paint()..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
+  static final Paint _stemHighlightPaint = Paint()..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
+  static final Paint _leafShadowPaint = Paint();
+  static final Paint _leafBodyPaint = Paint();
+  static final Paint _veinPaint = Paint()..style = PaintingStyle.stroke..strokeWidth = 1.1..strokeCap = StrokeCap.round;
+  static final Paint _sideVeinPaint = Paint()..style = PaintingStyle.stroke..strokeWidth = 0.8..strokeCap = StrokeCap.round;
+  static final Paint _bladePaint = Paint()..style = PaintingStyle.stroke..strokeWidth = 2.2..strokeCap = StrokeCap.round;
+  static final Paint _bladeEdgePaint = Paint()..style = PaintingStyle.stroke..strokeWidth = 2.2..strokeCap = StrokeCap.round;
+  static final Paint _pollenAuraPaint = Paint();
+  static final Paint _pollenCorePaint = Paint();
+
+  // Cached background shader
+  static Size? _lastBgSize;
+  static bool? _lastBgDark;
+  static Shader? _cachedBgShader;
+
+  // Pre-rendered flower head pictures keyed by "${radius}_${layer}_${isDark}"
+  static final Map<String, ui.Picture> _flowerHeadCache = {};
+
   /// Draws a stem with 2.5D perspective extrusion and cylindrical highlight.
   void _drawStem(
     Canvas canvas,
@@ -485,7 +530,8 @@ class _Sunflowers25DPainter extends CustomPainter {
     int layer,
   ) {
     final stemThickness = (radius * 0.14).clamp(3.0, 6.5);
-    final stemPath = Path()
+    _stemPath.reset();
+    _stemPath
       ..moveTo(p0.dx, p0.dy)
       ..cubicTo(p1.dx, p1.dy, p2.dx, p2.dy, p3.dx, p3.dy);
 
@@ -493,34 +539,28 @@ class _Sunflowers25DPainter extends CustomPainter {
     final shadowColor = isDark
         ? const Color(0xFF142410).withValues(alpha: layer == 0 ? 0.75 : 0.95)
         : const Color(0xFF223E16).withValues(alpha: layer == 0 ? 0.65 : 0.90);
-    final shadowPaint = Paint()
-      ..style = PaintingStyle.stroke
+    _stemShadowPaint
       ..strokeWidth = stemThickness
-      ..strokeCap = StrokeCap.round
       ..color = shadowColor;
-    canvas.drawPath(stemPath.shift(const Offset(2.0, 2.5)), shadowPaint);
+    canvas.drawPath(_stemPath.shift(const Offset(2.0, 2.5)), _stemShadowPaint);
 
     // Main stem body in rich olive-spring green
     final mainColor = isDark
         ? (layer == 0 ? const Color(0xFF33531F) : const Color(0xFF3D6325))
         : (layer == 0 ? const Color(0xFF5D853A) : const Color(0xFF4F7A2C));
-    final mainPaint = Paint()
-      ..style = PaintingStyle.stroke
+    _stemMainPaint
       ..strokeWidth = stemThickness
-      ..strokeCap = StrokeCap.round
       ..color = mainColor;
-    canvas.drawPath(stemPath, mainPaint);
+    canvas.drawPath(_stemPath, _stemMainPaint);
 
     // Subtle top-left cylindrical sheen
     final highlightColor = isDark
         ? const Color(0xFF6B9B45).withValues(alpha: 0.35)
         : const Color(0xFF88BD55).withValues(alpha: 0.55);
-    final highlightPaint = Paint()
-      ..style = PaintingStyle.stroke
+    _stemHighlightPaint
       ..strokeWidth = stemThickness * 0.32
-      ..strokeCap = StrokeCap.round
       ..color = highlightColor;
-    canvas.drawPath(stemPath.shift(const Offset(-0.8, -0.6)), highlightPaint);
+    canvas.drawPath(_stemPath.shift(const Offset(-0.8, -0.6)), _stemHighlightPaint);
   }
 
   /// Draws 2.5D leaves with perspective extrusion and leaf veins.
@@ -554,7 +594,8 @@ class _Sunflowers25DPainter extends CustomPainter {
       canvas.rotate(finalAngle);
 
       // Leaf contour
-      final leafPath = Path()
+      _leafPath.reset();
+      _leafPath
         ..moveTo(0, 0)
         ..quadraticBezierTo(leafLen * 0.45, -leafW * 0.55, leafLen, leafLen * 0.16)
         ..quadraticBezierTo(leafLen * 0.55, leafW * 0.65, 0, 0);
@@ -563,67 +604,61 @@ class _Sunflowers25DPainter extends CustomPainter {
       final leafShadowColor = isDark
           ? const Color(0xFF13230F).withValues(alpha: layer == 0 ? 0.70 : 0.95)
           : const Color(0xFF1F3B14).withValues(alpha: layer == 0 ? 0.60 : 0.88);
+      _leafShadowPaint.color = leafShadowColor;
       canvas.drawPath(
-        leafPath.shift(const Offset(2.2, 2.5)),
-        Paint()..color = leafShadowColor,
+        _leafPath.shift(const Offset(2.2, 2.5)),
+        _leafShadowPaint,
       );
 
       // 2. Main leaf body
       final leafBodyColor = isDark
           ? (layer == 0 ? const Color(0xFF2E4C1C) : const Color(0xFF385E22))
           : (layer == 0 ? const Color(0xFF5A8437) : const Color(0xFF4C7B2A));
-      canvas.drawPath(leafPath, Paint()..color = leafBodyColor);
+      _leafBodyPaint.color = leafBodyColor;
+      canvas.drawPath(_leafPath, _leafBodyPaint);
 
       // 3. Central leaf vein
-      final veinPath = Path()
+      _veinPath.reset();
+      _veinPath
         ..moveTo(0, 0)
         ..quadraticBezierTo(leafLen * 0.50, leafLen * 0.06, leafLen * 0.90, leafLen * 0.14);
       final veinColor = isDark
           ? const Color(0xFF6B9C45).withValues(alpha: 0.50)
           : const Color(0xFF8DC458).withValues(alpha: 0.65);
-      canvas.drawPath(
-        veinPath,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.1
-          ..strokeCap = StrokeCap.round
-          ..color = veinColor,
-      );
+      _veinPaint.color = veinColor;
+      canvas.drawPath(_veinPath, _veinPaint);
 
       // 4. Lateral leaf veins
-      final sideVeinPaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.8
-        ..strokeCap = StrokeCap.round
-        ..color = veinColor.withValues(alpha: isDark ? 0.35 : 0.45);
+      _sideVeinPaint.color = veinColor.withValues(alpha: isDark ? 0.35 : 0.45);
 
       canvas.drawLine(
         Offset(leafLen * 0.32, leafLen * 0.03),
         Offset(leafLen * 0.48, -leafW * 0.22),
-        sideVeinPaint,
+        _sideVeinPaint,
       );
       canvas.drawLine(
         Offset(leafLen * 0.42, leafLen * 0.05),
         Offset(leafLen * 0.58, leafW * 0.26),
-        sideVeinPaint,
+        _sideVeinPaint,
       );
 
       canvas.restore();
     }
   }
 
-  /// Draws the complete 2.5D sunflower head with layered crowns, 2.5D extrusion rims,
-  /// perspective-tilted disk, and Fibonacci seed core.
-  void _drawFlowerHead(
-    Canvas canvas,
-    Offset headPt,
-    double tiltAngle,
-    double radius,
-    int layer,
-  ) {
-    canvas.save();
-    canvas.translate(headPt.dx, headPt.dy);
-    canvas.rotate(tiltAngle);
+  /// Returns a pre-rendered ui.Picture of the flower head for the given parameters,
+  /// creating it exactly once on demand and caching it.
+  static ui.Picture _getOrCreateFlowerHeadPicture({
+    required double radius,
+    required int layer,
+    required bool isDark,
+  }) {
+    final key = '${radius.toStringAsFixed(2)}_$layer\_$isDark';
+    final cached = _flowerHeadCache[key];
+    if (cached != null) return cached;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
 
     // 2.5D tilted perspective squash: view angle tilted slightly downward
     canvas.scale(1.0, 0.88);
@@ -796,11 +831,34 @@ class _Sunflowers25DPainter extends CustomPainter {
       specularArcPaint,
     );
 
+    final pic = recorder.endRecording();
+    _flowerHeadCache[key] = pic;
+    return pic;
+  }
+
+  /// Draws the complete 2.5D sunflower head using the pre-rendered ui.Picture.
+  /// Only applies translation and rotation per frame.
+  void _drawFlowerHead(
+    Canvas canvas,
+    Offset headPt,
+    double tiltAngle,
+    double radius,
+    int layer,
+  ) {
+    final picture = _getOrCreateFlowerHeadPicture(
+      radius: radius,
+      layer: layer,
+      isDark: isDark,
+    );
+    canvas.save();
+    canvas.translate(headPt.dx, headPt.dy);
+    canvas.rotate(tiltAngle);
+    canvas.drawPicture(picture);
     canvas.restore();
   }
 
   /// Builds an organic sunflower petal contour.
-  Path _buildPetalPath(double startR, double length, double width) {
+  static Path _buildPetalPath(double startR, double length, double width) {
     return Path()
       ..moveTo(0, startR)
       ..cubicTo(
@@ -827,34 +885,37 @@ class _Sunflowers25DPainter extends CustomPainter {
   /// In Dark mode: deep nocturnal meadow twilight gradient.
   void _drawBackground(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    final Paint bgPaint = Paint();
-
-    if (isDark) {
-      bgPaint.shader = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color(0xFF0F1510),
-          Color(0xFF131D14),
-          Color(0xFF172418),
-        ],
-        stops: [0.0, 0.60, 1.0],
-      ).createShader(rect);
-    } else {
-      bgPaint.shader = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color(0xFFFAF8F5), // Neo-Pastel warm cream
-          Color(0xFFF7F3EB), // Soft warm transition
-          Color(0xFFEFF5E6), // Pale sunny meadow tint
-          Color(0xFFE2EBD5), // Warm meadow base
-        ],
-        stops: [0.0, 0.45, 0.75, 1.0],
-      ).createShader(rect);
+    if (_cachedBgShader == null || _lastBgSize != size || _lastBgDark != isDark) {
+      _lastBgSize = size;
+      _lastBgDark = isDark;
+      if (isDark) {
+        _cachedBgShader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFF0F1510),
+            Color(0xFF131D14),
+            Color(0xFF172418),
+          ],
+          stops: [0.0, 0.60, 1.0],
+        ).createShader(rect);
+      } else {
+        _cachedBgShader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFFFAF8F5), // Neo-Pastel warm cream
+            Color(0xFFF7F3EB), // Soft warm transition
+            Color(0xFFEFF5E6), // Pale sunny meadow tint
+            Color(0xFFE2EBD5), // Warm meadow base
+          ],
+          stops: [0.0, 0.45, 0.75, 1.0],
+        ).createShader(rect);
+      }
     }
 
-    canvas.drawRect(rect, bgPaint);
+    _bgPaint.shader = _cachedBgShader;
+    canvas.drawRect(rect, _bgPaint);
   }
 
   /// Draws the back rolling meadow hill.
@@ -862,7 +923,8 @@ class _Sunflowers25DPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
 
-    final path = Path()
+    _scratchPath.reset();
+    _scratchPath
       ..moveTo(0, h)
       ..lineTo(0, h - 36)
       ..quadraticBezierTo(w * 0.28, h - 50, w * 0.55, h - 38)
@@ -873,7 +935,8 @@ class _Sunflowers25DPainter extends CustomPainter {
     final hillColor = isDark
         ? const Color(0xFF1E281C).withValues(alpha: 0.88)
         : const Color(0xFF8FA876).withValues(alpha: 0.38);
-    canvas.drawPath(path, Paint()..color = hillColor);
+    _hillPaint.color = hillColor;
+    canvas.drawPath(_scratchPath, _hillPaint);
   }
 
   /// Draws the mid rolling meadow hill with a 2.5D perspective rim.
@@ -881,7 +944,8 @@ class _Sunflowers25DPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
 
-    final path = Path()
+    _scratchPath.reset();
+    _scratchPath
       ..moveTo(0, h)
       ..lineTo(0, h - 25)
       ..quadraticBezierTo(w * 0.32, h - 16, w * 0.62, h - 32)
@@ -893,15 +957,17 @@ class _Sunflowers25DPainter extends CustomPainter {
     final edgeColor = isDark
         ? const Color(0xFF121B11)
         : const Color(0xFF385227).withValues(alpha: 0.40);
+    _hillEdgePaint.color = edgeColor;
     canvas.drawPath(
-      path.shift(const Offset(2.0, 2.5)),
-      Paint()..color = edgeColor,
+      _scratchPath.shift(const Offset(2.0, 2.5)),
+      _hillEdgePaint,
     );
 
     final hillColor = isDark
         ? const Color(0xFF1A2619)
         : const Color(0xFF5B8049).withValues(alpha: 0.72);
-    canvas.drawPath(path, Paint()..color = hillColor);
+    _hillPaint.color = hillColor;
+    canvas.drawPath(_scratchPath, _hillPaint);
   }
 
   /// Draws the foreground meadow turf with grass tufts and 2.5D extrusion.
@@ -909,7 +975,8 @@ class _Sunflowers25DPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
 
-    final path = Path()
+    _scratchPath.reset();
+    _scratchPath
       ..moveTo(0, h)
       ..lineTo(0, h - 14)
       ..quadraticBezierTo(w * 0.24, h - 22, w * 0.50, h - 13)
@@ -921,13 +988,15 @@ class _Sunflowers25DPainter extends CustomPainter {
     final edgeColor = isDark
         ? const Color(0xFF0D140C)
         : const Color(0xFF2B3F1D).withValues(alpha: 0.55);
+    _hillEdgePaint.color = edgeColor;
     canvas.drawPath(
-      path.shift(const Offset(2.0, 2.5)),
-      Paint()..color = edgeColor,
+      _scratchPath.shift(const Offset(2.0, 2.5)),
+      _hillEdgePaint,
     );
 
     final turfColor = isDark ? const Color(0xFF141E13) : const Color(0xFF476937);
-    canvas.drawPath(path, Paint()..color = turfColor);
+    _turfPaint.color = turfColor;
+    canvas.drawPath(_scratchPath, _turfPaint);
 
     // Stylized grass blades swaying along the turf
     _drawGrassBlades(canvas, size, t);
@@ -941,17 +1010,8 @@ class _Sunflowers25DPainter extends CustomPainter {
     final bladeColor = isDark ? const Color(0xFF325224) : const Color(0xFF659247);
     final bladeEdgeColor = isDark ? const Color(0xFF15220F) : const Color(0xFF2E4B1C);
 
-    final bladePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
-      ..strokeCap = StrokeCap.round
-      ..color = bladeColor;
-
-    final bladeEdgePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
-      ..strokeCap = StrokeCap.round
-      ..color = bladeEdgeColor;
+    _bladePaint.color = bladeColor;
+    _bladeEdgePaint.color = bladeEdgeColor;
 
     const bladePositions = [0.04, 0.16, 0.26, 0.42, 0.58, 0.72, 0.84, 0.96];
     for (int i = 0; i < bladePositions.length; i++) {
@@ -960,12 +1020,13 @@ class _Sunflowers25DPainter extends CustomPainter {
       final bladeH = 14.0 + (i % 3) * 5.0;
       final sway = math.sin(t * 2 * math.pi * 1.5 + i * 0.9) * 5.0;
 
-      final grassPath = Path()
+      _grassPath.reset();
+      _grassPath
         ..moveTo(bx, by)
         ..quadraticBezierTo(bx + sway * 0.4, by - bladeH * 0.55, bx + sway, by - bladeH);
 
-      canvas.drawPath(grassPath.shift(const Offset(1.5, 1.8)), bladeEdgePaint);
-      canvas.drawPath(grassPath, bladePaint);
+      canvas.drawPath(_grassPath.shift(const Offset(1.5, 1.8)), _bladeEdgePaint);
+      canvas.drawPath(_grassPath, _bladePaint);
     }
   }
 
@@ -990,14 +1051,13 @@ class _Sunflowers25DPainter extends CustomPainter {
       final alpha = (isDark ? 0.55 : 0.42) * pulse;
 
       // Soft ambient aura
-      final auraPaint = Paint()
-        ..color = const Color(0xFFF9C74F).withValues(alpha: alpha * 0.35);
-      canvas.drawCircle(Offset(px, py), p.size * 2.2, auraPaint);
+      _pollenAuraPaint.color = const Color(0xFFF9C74F).withValues(alpha: alpha * 0.35);
+      canvas.drawCircle(Offset(px, py), p.size * 2.2, _pollenAuraPaint);
 
       // Bright core mote
       final coreColor = isDark ? const Color(0xFFFFF1C2) : const Color(0xFFEAA620);
-      final corePaint = Paint()..color = coreColor.withValues(alpha: alpha);
-      canvas.drawCircle(Offset(px, py), p.size, corePaint);
+      _pollenCorePaint.color = coreColor.withValues(alpha: alpha);
+      canvas.drawCircle(Offset(px, py), p.size, _pollenCorePaint);
     }
   }
 
@@ -1011,4 +1071,4 @@ class _Sunflowers25DPainter extends CustomPainter {
 }
 
 /// Semantic alias for backward compatibility.
-typedef _SunflowerWindPainter = _Sunflowers25DPainter;
+typedef SunflowerWindPainter = _Sunflowers25DPainter;

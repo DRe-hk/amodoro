@@ -30,6 +30,7 @@ export async function GET(request: Request) {
           avatarId: me.avatarId || "cat",
           isPaired: Boolean(getPartnerUser(me.id)),
           hasPin: Boolean(me.pinHash && me.pinHash.length > 0),
+          pinVersion: me.pinVersion ?? 1,
           nicknameByPartner: me.nicknameByPartner,
         }
       : null,
@@ -54,7 +55,18 @@ export async function POST(request: Request) {
       password?: string;
       code?: string;
       userId?: number;
+      deviceId?: string;
+      deviceName?: string;
     };
+
+    const deviceId =
+      request.headers.get("x-device-id")?.trim() ||
+      body.deviceId?.trim() ||
+      null;
+    const deviceName =
+      request.headers.get("x-device-name")?.trim() ||
+      body.deviceName?.trim() ||
+      null;
 
     const result = await loginApiUser({
       mode: body.mode ?? "pin_login",
@@ -72,6 +84,8 @@ export async function POST(request: Request) {
       rawToken,
       clientIp,
       userAgent: request.headers.get("user-agent"),
+      deviceId,
+      deviceName,
     });
 
     if (!result) {
@@ -88,12 +102,37 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: true });
     }
 
+    if ("checkedPin" in result) {
+      if (!result.valid) {
+        return jsonResponse(
+          {
+            ok: false,
+            valid: false,
+            error: "PIN incorrecto.",
+          },
+          401,
+        );
+      }
+      return jsonResponse({
+        ok: true,
+        valid: true,
+        pinVersion: result.user.pinVersion ?? 1,
+        user: {
+          id: result.user.id,
+          username: result.user.username,
+          displayName: result.user.displayName || result.user.username,
+          pinVersion: result.user.pinVersion ?? 1,
+        },
+      });
+    }
+
     const partner = getPartnerUser(result.user.id);
     const isPaired = Boolean(partner && result.user.partnerId);
 
     return jsonResponse({
       ok: true,
       token: result.token,
+      reused: "reused" in result ? result.reused : false,
       recoveryCode: result.recoveryCode ?? null,
       isPaired,
       user: {
@@ -103,6 +142,7 @@ export async function POST(request: Request) {
         avatarId: result.user.avatarId || "cat",
         isPaired,
         hasPin: Boolean(result.user.pinHash && result.user.pinHash.length > 0),
+        pinVersion: result.user.pinVersion ?? 1,
         nicknameByPartner: result.user.nicknameByPartner,
         themeMode: result.user.themeMode,
         accentPalette: result.user.accentPalette,

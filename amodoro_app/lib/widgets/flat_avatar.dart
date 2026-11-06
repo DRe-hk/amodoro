@@ -165,13 +165,9 @@ class FlatAvatar extends FlatAvatarBadge {
 /// Fallback vector animal painter delegate wrapper.
 class _FlatAnimalAvatarPainter extends CustomPainter {
   final String avatarId;
-  final Color? primaryColor;
-  final Color? backgroundColor;
 
   const _FlatAnimalAvatarPainter({
     required this.avatarId,
-    this.primaryColor,
-    this.backgroundColor,
   });
 
   @override
@@ -179,17 +175,15 @@ class _FlatAnimalAvatarPainter extends CustomPainter {
     final option = flatAvatarFor(avatarId);
     final painter = _FlatAnimalPainter(
       avatarId: avatarId,
-      primaryColor: primaryColor ?? option.primary,
-      backgroundColor: backgroundColor ?? option.background,
+      primaryColor: option.primary,
+      backgroundColor: option.background,
     );
     painter.paint(canvas, size);
   }
 
   @override
   bool shouldRepaint(covariant _FlatAnimalAvatarPainter oldDelegate) {
-    return oldDelegate.avatarId != avatarId ||
-        oldDelegate.primaryColor != primaryColor ||
-        oldDelegate.backgroundColor != backgroundColor;
+    return oldDelegate.avatarId != avatarId;
   }
 }
 

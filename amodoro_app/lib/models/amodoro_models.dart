@@ -787,3 +787,49 @@ class SyncPayload {
     );
   }
 }
+
+class StickerModel {
+  final int id;
+  final int ownerId;
+  final int mediaId;
+  final String mediaUrl;
+  final String? createdAt;
+  final bool isMine;
+
+  const StickerModel({
+    required this.id,
+    required this.ownerId,
+    required this.mediaId,
+    required this.mediaUrl,
+    this.createdAt,
+    this.isMine = false,
+  });
+
+  factory StickerModel.fromJson(Map<String, dynamic> json) {
+    return StickerModel(
+      id: (json['id'] as num?)?.toInt() ??
+          int.tryParse(json['id']?.toString() ?? '0') ??
+          0,
+      ownerId: (json['ownerId'] as num?)?.toInt() ??
+          int.tryParse(json['ownerId']?.toString() ?? '0') ??
+          0,
+      mediaId: (json['mediaId'] as num?)?.toInt() ??
+          int.tryParse(json['mediaId']?.toString() ?? '0') ??
+          0,
+      mediaUrl: (json['mediaUrl'] ?? json['url'] ?? json['path'] ?? '').toString(),
+      createdAt: json['createdAt']?.toString(),
+      isMine: json['isMine'] == true,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'ownerId': ownerId,
+      'mediaId': mediaId,
+      'mediaUrl': mediaUrl,
+      'createdAt': createdAt,
+      'isMine': isMine,
+    };
+  }
+}

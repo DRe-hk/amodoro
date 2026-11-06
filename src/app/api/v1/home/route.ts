@@ -241,7 +241,9 @@ export async function POST(request: Request) {
         title: "Nueva respuesta en amodoro 💬",
         body: reply.textContent
           ? `${user.displayName}: "${reply.textContent}"`
-          : `${user.displayName} respondió con una imagen`,
+          : reply.mediaType === "sticker"
+            ? `${user.displayName} respondió con un sticker`
+            : `${user.displayName} respondió con una imagen`,
         data: {
           type: "reply",
           cardId: String(reply.cardId),

@@ -5,6 +5,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../models/amodoro_models.dart';
 import '../services/api_client.dart';
 import '../theme/amodoro_theme.dart';
+import '../widgets/amodoro_image.dart';
 import '../widgets/drawing_canvas.dart';
 import '../widgets/link_preview_card.dart';
 import '../widgets/pressable_button.dart';
@@ -622,26 +623,12 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   }
 
   Widget _buildExistingMediaPreview(String url) {
-    if (url.startsWith('data:image/')) {
-      final comma = url.indexOf(',');
-      if (comma != -1) {
-        try {
-          final bytes = base64Decode(url.substring(comma + 1));
-          return Image.memory(
-            bytes,
-            width: double.infinity,
-            height: double.infinity,
-            fit: BoxFit.cover,
-          );
-        } catch (_) {}
-      }
-    }
-    return Image.network(
-      url,
+    return AmodoroImage(
+      imageUrl: url,
       width: double.infinity,
       height: double.infinity,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+      errorPlaceholder: const SizedBox.shrink(),
     );
   }
 

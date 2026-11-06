@@ -5,6 +5,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 
 export const THEME_MODES = ["light", "dark", "system"] as const;
 export type ThemeMode = (typeof THEME_MODES)[number];
@@ -74,21 +75,32 @@ export const users = sqliteTable(
       .default(
         JSON.stringify(["❤️", "🥰", "🥺", "✨", "🔥", "🫶"]),
       ),
+    pinVersion: integer("pin_version").notNull().default(1),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
   (t) => [uniqueIndex("users_username_idx").on(t.username)],
 );
 
-export const sessions = sqliteTable("sessions", {
-  id: text("id").primaryKey(),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
-  lastSeenAt: integer("last_seen_at", { mode: "timestamp" }).notNull(),
-  userAgent: text("user_agent"),
-});
+export const sessions = sqliteTable(
+  "sessions",
+  {
+    id: text("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+    lastSeenAt: integer("last_seen_at", { mode: "timestamp" }).notNull(),
+    userAgent: text("user_agent"),
+    deviceId: text("device_id"),
+    deviceName: text("device_name"),
+  },
+  (t) => [
+    uniqueIndex("idx_sessions_user_device")
+      .on(t.userId, t.deviceId)
+      .where(sql`${t.deviceId} IS NOT NULL`),
+  ],
+);
 
 export const inviteTokens = sqliteTable(
   "invite_tokens",
@@ -110,7 +122,7 @@ export const inviteTokens = sqliteTable(
   ],
 );
 
-export const MEDIA_KINDS = ["image", "drawing"] as const;
+export const MEDIA_KINDS = ["image", "drawing", "sticker"] as const;
 export type MediaKind = (typeof MEDIA_KINDS)[number];
 
 export const media = sqliteTable(
@@ -130,6 +142,21 @@ export const media = sqliteTable(
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
   (t) => [uniqueIndex("media_path_idx").on(t.path)],
+);
+
+export const stickers = sqliteTable(
+  "stickers",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    ownerId: integer("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    mediaId: integer("media_id")
+      .notNull()
+      .references(() => media.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  },
+  (t) => [index("stickers_owner_idx").on(t.ownerId)],
 );
 
 export const homeCards = sqliteTable(

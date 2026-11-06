@@ -149,12 +149,44 @@ function cookieIsSecure() {
   return process.env.NODE_ENV === "production";
 }
 
+export type CreateSessionOptions = {
+  userAgent?: string | null;
+  deviceId?: string | null;
+  deviceName?: string | null;
+};
+
 export async function createSessionForUser(
   userId: number,
-  userAgent: string | null = null,
+  optionsOrUserAgent?: string | null | CreateSessionOptions,
+  legacyDeviceId?: string | null,
+  legacyDeviceName?: string | null,
 ) {
+  let userAgent: string | null = null;
+  let deviceId: string | null = null;
+  let deviceName: string | null = null;
+
+  if (
+    optionsOrUserAgent &&
+    typeof optionsOrUserAgent === "object" &&
+    !("toLowerCase" in optionsOrUserAgent)
+  ) {
+    userAgent = optionsOrUserAgent.userAgent ?? null;
+    deviceId = optionsOrUserAgent.deviceId?.trim() || null;
+    deviceName = optionsOrUserAgent.deviceName?.trim() || null;
+  } else if (typeof optionsOrUserAgent === "string") {
+    userAgent = optionsOrUserAgent;
+    deviceId = legacyDeviceId?.trim() || null;
+    deviceName = legacyDeviceName?.trim() || null;
+  }
+
   const now = new Date();
   const expires = new Date(now.getTime() + SESSION_DAYS * 86_400_000);
+
+  if (deviceId) {
+    db.delete(sessions)
+      .where(and(eq(sessions.userId, userId), eq(sessions.deviceId, deviceId)))
+      .run();
+  }
 
   const existing = db
     .select()
@@ -180,6 +212,8 @@ export async function createSessionForUser(
       expiresAt: expires,
       lastSeenAt: now,
       userAgent,
+      deviceId,
+      deviceName,
     })
     .run();
 
@@ -516,12 +550,14 @@ export async function changeUserPin(input: {
   const newPinHash = await hashPassword(cleanNewPin);
   const recoveryCode = generateReadableShortCode();
   const recoveryCodeHash = sha256(normalizeShortCode(recoveryCode));
+  const newPinVersion = (user.pinVersion ?? 1) + 1;
 
   db.update(users)
     .set({
       pinHash: newPinHash,
       passwordHash: newPinHash,
       recoveryCodeHash,
+      pinVersion: newPinVersion,
     })
     .where(eq(users.id, user.id))
     .run();
@@ -601,12 +637,14 @@ export async function recoverUserPin(input: {
   const newPinHash = await hashPassword(cleanNewPin);
   const newRecoveryCode = generateReadableShortCode();
   const newRecoveryCodeHash = sha256(normalizeShortCode(newRecoveryCode));
+  const newPinVersion = (user.pinVersion ?? 1) + 1;
 
   db.update(users)
     .set({
       pinHash: newPinHash,
       passwordHash: newPinHash,
       recoveryCodeHash: newRecoveryCodeHash,
+      pinVersion: newPinVersion,
     })
     .where(eq(users.id, user.id))
     .run();
